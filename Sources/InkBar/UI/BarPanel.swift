@@ -21,6 +21,7 @@ private final class KeyPanel: NSPanel {
 final class BarPanelController {
     private let panel: KeyPanel
     private let view: BarView
+    private let tag = NameTag()
     private var outsideClick: Any?
     var onActivate: ((BarCell) -> Void)?
     var isVisible: Bool { panel.isVisible }
@@ -41,6 +42,15 @@ final class BarPanelController {
             self?.onActivate?(cell)
         }
         view.onClose = { [weak self] in self?.hide() }
+        view.onHover = { [weak self] hover in self?.showName(hover) }
+    }
+
+    /// The hovered item's name, in a small tag under the bar, centered on the item.
+    private func showName(_ hover: (name: String, rect: CGRect)?) {
+        guard let hover, panel.isVisible else { return tag.hide() }
+        let onScreen = panel.convertToScreen(view.convert(hover.rect, to: nil))
+        tag.show(hover.name, painter: view.painter, appearance: panel.appearance,
+                 centeredAt: onScreen.midX, below: panel.frame.minY - 4, within: panel.screen?.visibleFrame)
     }
 
     func show(_ cells: [BarCell], painter: Painter, appearance: NSAppearance?, search: Bool) {
@@ -71,6 +81,7 @@ final class BarPanelController {
     }
 
     func hide() {
+        tag.hide()
         panel.orderOut(nil)
         if let outsideClick { NSEvent.removeMonitor(outsideClick) }
         outsideClick = nil
@@ -81,9 +92,7 @@ final class BarPanelController {
 }
 
 final class BarView: NSView {
-    static let height: CGFloat = 54
-    /// The top row holds the hovered item's name, clear of the border.
-    private let nameRow: CGFloat = 10
+    static let height: CGFloat = 46
     private let pad: CGFloat = 12, gap: CGFloat = 6, iconHeight: CGFloat = 22
 
     var painter = Painter(theme: .ink, palette: .make(.ink, dark: false), texture: 1)
@@ -91,9 +100,12 @@ final class BarView: NSView {
     var query: String? { didSet { needsDisplay = true; invalidateIntrinsicContentSize() } }
     var onActivate: ((BarCell) -> Void)?
     var onClose: (() -> Void)?
+    /// The hovered item's name and where it sits in the bar, or nil when nothing is hovered.
+    var onHover: (((name: String, rect: CGRect)?) -> Void)?
 
-    private var hovered: Int?
-    private var rects: [CGRect] = []
+    /// Set by the pointer, or directly when drawing the README screenshots.
+    var hovered: Int? { didSet { needsDisplay = true } }
+    private(set) var rects: [CGRect] = []
     private var paper: (dark: Bool, image: CGImage)?
 
     override var isFlipped: Bool { true }
@@ -128,7 +140,7 @@ final class BarView: NSView {
     private func layout(_ ctx: CGContext?) -> CGFloat {
         let p = painter, pal = p.palette
         var x = pad
-        let midY = (Self.height + nameRow) / 2
+        let midY = Self.height / 2
         if ctx != nil { rects = [] }
 
         if let query {
@@ -178,16 +190,17 @@ final class BarView: NSView {
     private func drawCell(_ ctx: CGContext, _ cell: BarCell, rect: CGRect, hovered: Bool) {
         let p = painter, pal = p.palette
         if hovered {
+            // One mark per theme: a wash with a brush stroke under it, or a hand-drawn box.
             switch p.theme {
             case .ink:
                 ctx.saveGState()
                 ctx.setFillColor(pal.ink.copy(alpha: 0.07)!)
                 ctx.fill(rect.insetBy(dx: -3, dy: -3))
                 ctx.restoreGState()
+                p.rule(ctx, from: CGPoint(x: rect.minX, y: rect.maxY + 5), to: CGPoint(x: rect.maxX, y: rect.maxY + 5), seed: 11)
             case .sketch:
-                p.outline(ctx, rect.insetBy(dx: -3, dy: -3), color: pal.a, seed: 31, small: true)
+                p.outline(ctx, rect.insetBy(dx: -4, dy: -4), color: pal.a, seed: 31, small: true)
             }
-            p.rule(ctx, from: CGPoint(x: rect.minX, y: rect.maxY + 5), to: CGPoint(x: rect.maxX, y: rect.maxY + 5), seed: 11)
         }
         let flipped = { (draw: () -> Void) in
             ctx.saveGState()
@@ -211,10 +224,6 @@ final class BarView: NSView {
         }
         if !Notarization.isTrusted(cell.entry.bundleURL) {
             p.dot(ctx, CGPoint(x: rect.maxX, y: rect.minY), radius: 2, seed: 5)
-        }
-        if hovered {
-            let label = NSAttributedString.styled(cell.name, p.fonts.text(10), pal.sub)
-            label.draw(at: CGPoint(x: max(10, min(rect.minX, bounds.width - label.size().width - 10)), y: 4))
         }
     }
 
@@ -250,12 +259,16 @@ final class BarView: NSView {
     override func mouseMoved(with event: NSEvent) {
         let point = convert(event.locationInWindow, from: nil)
         let index = rects.firstIndex { $0.insetBy(dx: -3, dy: -6).contains(point) }
-        if index != hovered { hovered = index; needsDisplay = true }
+        guard index != hovered else { return }
+        hovered = index
+        needsDisplay = true
+        onHover?(index.flatMap { i in visibleCells.indices.contains(i) ? (visibleCells[i].name, rects[i]) : nil })
     }
 
     override func mouseExited(with event: NSEvent) {
         hovered = nil
         needsDisplay = true
+        onHover?(nil)
     }
 
     override func mouseUp(with event: NSEvent) {
@@ -280,5 +293,73 @@ final class BarView: NSView {
         frame.origin.x = frame.maxX - fittingSize.width
         frame.size.width = fittingSize.width
         window.setFrame(frame, display: true)
+    }
+}
+
+/// A small paper tag that names the hovered item, under the bar.
+private final class NameTag {
+    private let panel: NSPanel
+    private let view = NameTagView()
+
+    init() {
+        panel = NSPanel(contentRect: .zero, styleMask: [.borderless, .nonactivatingPanel], backing: .buffered, defer: true)
+        panel.isOpaque = false
+        panel.backgroundColor = .clear
+        panel.hasShadow = true
+        panel.level = .popUpMenu
+        panel.ignoresMouseEvents = true
+        panel.collectionBehavior = [.canJoinAllSpaces, .fullScreenAuxiliary]
+        panel.contentView = view
+    }
+
+    func show(_ name: String, painter: Painter, appearance: NSAppearance?, centeredAt x: CGFloat, below top: CGFloat, within bounds: CGRect?) {
+        view.painter = painter
+        view.name = name
+        let size = view.fittingSize
+        var origin = CGPoint(x: x - size.width / 2, y: top - size.height)
+        if let bounds { origin.x = min(max(origin.x, bounds.minX + 4), bounds.maxX - size.width - 4) }
+        panel.appearance = appearance
+        panel.setFrame(CGRect(origin: origin, size: size), display: true)
+        view.needsDisplay = true
+        panel.orderFrontRegardless()
+    }
+
+    func hide() { panel.orderOut(nil) }
+}
+
+final class NameTagView: NSView {
+    var painter = Painter(theme: .ink, palette: .make(.ink, dark: false), texture: 1)
+    var name = ""
+
+    override var isFlipped: Bool { true }
+
+    private var text: NSAttributedString {
+        NSAttributedString.styled(name, painter.fonts.text(11), painter.palette.ink)
+    }
+
+    override var fittingSize: NSSize {
+        let size = text.size()
+        return NSSize(width: ceil(size.width) + 20, height: ceil(size.height) + 10)
+    }
+
+    override func draw(_ dirtyRect: NSRect) {
+        guard let ctx = NSGraphicsContext.current?.cgContext else { return }
+        let pal = painter.palette
+        switch painter.theme {
+        case .ink:
+            let shape = CGPath(roundedRect: bounds.insetBy(dx: 0.5, dy: 0.5), cornerWidth: 4, cornerHeight: 4, transform: nil)
+            ctx.addPath(shape)
+            ctx.setFillColor(pal.paper)
+            ctx.fillPath()
+            ctx.addPath(shape)
+            ctx.setStrokeColor(pal.ink.copy(alpha: 0.15)!)
+            ctx.strokePath()
+        case .sketch:
+            ctx.setFillColor(pal.paper)
+            ctx.fill(bounds.insetBy(dx: 2, dy: 2))
+            painter.outline(ctx, bounds.insetBy(dx: 2.5, dy: 2.5), color: pal.ink, width: 1.2, seed: 61, small: true)
+        }
+        let size = text.size()
+        text.draw(at: CGPoint(x: (bounds.width - size.width) / 2, y: (bounds.height - size.height) / 2))
     }
 }

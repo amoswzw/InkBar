@@ -32,9 +32,11 @@ enum Screenshots {
             return BarCell(entry: entry, index: 0, alwaysHidden: false)
         }
         // Rendered before any slide makes its own drawing context current.
-        let inkBar = bar(cells, theme: .ink, dark: false, query: nil)
+        let (inkBar, hoverRect) = hoveredBar(cells, theme: .ink, dark: false, index: 2)
+        let nameTag = tag(cells[2].name, theme: .ink, dark: false)
         let sketchSearch = bar(cells, theme: .sketch, dark: false, query: "cl")
-        let sketchDark = bar(cells, theme: .sketch, dark: true, query: nil)
+        let (sketchDark, sketchHover) = hoveredBar(cells, theme: .sketch, dark: true, index: 0)
+        let sketchTag = tag(cells[0].name, theme: .sketch, dark: true)
         let overflowBar = bar(Array(cells.prefix(3)), theme: .ink, dark: false, query: nil)
 
         let model = SettingsModel()
@@ -63,8 +65,11 @@ enum Screenshots {
             let size = CGSize(width: inkBar.size.width * scale, height: inkBar.size.height * scale)
             let frame = CGRect(x: desk.maxX - 40 - size.width, y: desk.minY + height + 30, width: size.width, height: size.height)
             shadowed(ctx) { Promo.image(inkBar, in: frame) }
-            note(ctx, "click any item to open its menu", from: CGPoint(x: frame.minX - 40, y: frame.maxY + 210),
-                 to: CGPoint(x: frame.minX + 150, y: frame.maxY + 24))
+            let tagSize = CGSize(width: nameTag.size.width * scale, height: nameTag.size.height * scale)
+            let tagX = frame.minX + hoverRect.midX * scale - tagSize.width / 2
+            shadowed(ctx) { Promo.image(nameTag, in: CGRect(x: tagX, y: frame.maxY + 12, width: tagSize.width, height: tagSize.height)) }
+            note(ctx, "click any item to open its menu", from: CGPoint(x: frame.minX - 40, y: frame.maxY + 250),
+                 to: CGPoint(x: tagX - 10, y: frame.maxY + 12 + tagSize.height / 2))
         }
 
         Promo.slide(title: "No more »", subtitle: "Items that don't fit move to the ink bar instead of behind the system's chevron",
@@ -97,6 +102,11 @@ enum Screenshots {
             let fullFrame = CGRect(x: Promo.content.midX - full.width / 2, y: searchFrame.maxY + 300, width: full.width, height: full.height)
             caption("The whole ink bar, hand-drawn theme in dark", at: CGPoint(x: fullFrame.minX, y: fullFrame.minY - 76))
             shadowed(ctx) { Promo.image(sketchDark, in: fullFrame) }
+            let tagSize = CGSize(width: sketchTag.size.width * 2.6, height: sketchTag.size.height * 2.6)
+            shadowed(ctx) {
+                Promo.image(sketchTag, in: CGRect(x: fullFrame.minX + sketchHover.midX * 2.6 - tagSize.width / 2, y: fullFrame.maxY + 10,
+                                                  width: tagSize.width, height: tagSize.height))
+            }
         }
 
         Promo.slide(title: "Triggers and profiles", subtitle: "Bring items back when the battery runs low, you go offline, or an app comes to the front",
@@ -134,6 +144,36 @@ enum Screenshots {
         glyph.draw(in: CGRect(x: (size.width - glyph.size.width) / 2, y: (size.height - glyph.size.height) / 2, width: glyph.size.width, height: glyph.size.height))
         NSGraphicsContext.restoreGraphicsState()
         return ctx.makeImage()
+    }
+
+    /// The bar with one item hovered, and where that item sits in it.
+    private static func hoveredBar(_ cells: [BarCell], theme: ThemeID, dark: Bool, index: Int) -> (NSImage, CGRect) {
+        let view = BarView(frame: .zero)
+        view.appearance = NSAppearance(named: dark ? .darkAqua : .aqua)
+        view.painter = Painter(theme: theme, palette: .make(theme, dark: dark), texture: 1)
+        view.cells = cells
+        view.hovered = index
+        view.frame = NSRect(origin: .zero, size: view.fittingSize)
+        let image = NSImage(size: view.bounds.size)
+        if let rep = view.bitmapImageRepForCachingDisplay(in: view.bounds) {
+            view.cacheDisplay(in: view.bounds, to: rep)
+            image.addRepresentation(rep)
+        }
+        return (image, view.rects.indices.contains(index) ? view.rects[index] : .zero)
+    }
+
+    private static func tag(_ name: String, theme: ThemeID, dark: Bool) -> NSImage {
+        let view = NameTagView()
+        view.appearance = NSAppearance(named: dark ? .darkAqua : .aqua)
+        view.painter = Painter(theme: theme, palette: .make(theme, dark: dark), texture: 1)
+        view.name = name
+        view.frame = NSRect(origin: .zero, size: view.fittingSize)
+        let image = NSImage(size: view.bounds.size)
+        if let rep = view.bitmapImageRepForCachingDisplay(in: view.bounds) {
+            view.cacheDisplay(in: view.bounds, to: rep)
+            image.addRepresentation(rep)
+        }
+        return image
     }
 
     private static func bar(_ cells: [BarCell], theme: ThemeID, dark: Bool, query: String?) -> NSImage {
