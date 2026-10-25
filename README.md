@@ -9,10 +9,12 @@ Two themes, shared with [InkStats](../inkstats): 水墨 ink-wash and 手绘 Exca
 ## Screenshots
 
 <p>
-<img src="docs/screenshots/1-ink-bar.png" width="900" alt="Hidden items in the ink bar">
-<img src="docs/screenshots/2-overflow.png" width="900" alt="Items that do not fit move to the ink bar">
-<img src="docs/screenshots/3-search.png" width="900" alt="Searching the ink bar">
-<img src="docs/screenshots/4-triggers.png" width="900" alt="Triggers and appearance settings">
+<a href="docs/screenshots/1-ink-bar.png"><img src="docs/screenshots/1-ink-bar.png" width="49%" alt="Hidden items in the ink bar"></a>
+<a href="docs/screenshots/2-overflow.png"><img src="docs/screenshots/2-overflow.png" width="49%" alt="Items that do not fit move to the ink bar"></a>
+</p>
+<p>
+<a href="docs/screenshots/3-search.png"><img src="docs/screenshots/3-search.png" width="49%" alt="Searching the ink bar"></a>
+<a href="docs/screenshots/4-triggers.png"><img src="docs/screenshots/4-triggers.png" width="49%" alt="Triggers and appearance settings"></a>
 </p>
 
 ## Install
