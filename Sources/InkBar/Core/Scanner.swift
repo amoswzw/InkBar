@@ -97,6 +97,13 @@ enum AX {
 }
 
 enum Scanner {
+    /// The system's » button, if it's showing, without scanning every app.
+    static func overflowButton() -> CGRect? {
+        guard let agent = NSRunningApplication.runningApplications(withBundleIdentifier: "com.apple.MenuBarAgent").first,
+              let bar = AX.attribute(AXUIElementCreateApplication(agent.processIdentifier), "AXExtrasMenuBar") else { return nil }
+        return AX.children(bar as! AXUIElement).first { AX.string($0, kAXRoleAttribute) == kAXButtonRole }.map(AX.frame)
+    }
+
     static func scan() -> ScanResult {
         var result = ScanResult()
         let own = Bundle.main.bundleIdentifier

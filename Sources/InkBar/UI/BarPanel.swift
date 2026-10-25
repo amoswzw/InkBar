@@ -80,7 +80,9 @@ final class BarPanelController {
 }
 
 final class BarView: NSView {
-    static let height: CGFloat = 46
+    static let height: CGFloat = 54
+    /// The top row holds the hovered item's name, clear of the border.
+    private let nameRow: CGFloat = 10
     private let pad: CGFloat = 12, gap: CGFloat = 6, iconHeight: CGFloat = 22
 
     var painter = Painter(theme: .ink, palette: .make(.ink, dark: false), texture: 1)
@@ -125,7 +127,7 @@ final class BarView: NSView {
     private func layout(_ ctx: CGContext?) -> CGFloat {
         let p = painter, pal = p.palette
         var x = pad
-        let midY = Self.height / 2
+        let midY = (Self.height + nameRow) / 2
         if ctx != nil { rects = [] }
 
         if let query {
@@ -211,7 +213,7 @@ final class BarView: NSView {
         }
         if hovered {
             let label = NSAttributedString.styled(cell.name, p.fonts.text(10), pal.sub)
-            label.draw(at: CGPoint(x: min(rect.minX, bounds.width - label.size().width - 6), y: 1))
+            label.draw(at: CGPoint(x: max(10, min(rect.minX, bounds.width - label.size().width - 10)), y: 4))
         }
     }
 

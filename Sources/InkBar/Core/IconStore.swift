@@ -68,6 +68,16 @@ final class IconStore {
         }
     }
 
+    /// Captures one item right away, for an item that's only briefly in the menu bar.
+    @MainActor
+    func captureNow(_ key: String, frame: CGRect, overflowButton: CGRect?) async {
+        guard canCapture, #available(macOS 15.2, *), frame.width > 2, frame.minY < 40 else { return }
+        if let overflowButton, frame.minX < overflowButton.maxX { return }
+        if let notch = Self.notchGap(), frame.maxX > notch.minX, frame.minX < notch.maxX { return }
+        guard let image = try? await SCScreenshotManager.captureImage(in: frame) else { return }
+        store(image, key)
+    }
+
     private func store(_ image: CGImage, _ key: String) {
         capturedAt[key] = Date()
         // An empty stretch of menu bar means the item wasn't really there; keep the old picture.

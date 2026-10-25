@@ -16,26 +16,36 @@ final class Activator {
         let release = wasHidden ? visibility.reveal(entry.id) : {}
         // The menu bar needs a moment to lay the item out again before it can open a menu there.
         DispatchQueue.main.asyncAfter(deadline: .now() + (wasHidden ? 0.6 : 0)) {
-            guard let element = Self.currentElement(entry, index: index) else { return release() }
-            let baseline = Self.raisedWindows(pid: entry.pid)
-            // Pressing blocks until the menu closes, so it can't run on the main thread.
-            DispatchQueue.global(qos: .userInitiated).async { AXUIElementPerformAction(element, kAXPressAction as CFString) }
-            self.watchMenu(pid: entry.pid, ignoring: baseline, release: release)
+            let items = Self.currentElements(entry)
+            guard let element = index < items.count ? items[index] : items.last else { return release() }
+            Task { @MainActor in
+                // Items that were never in sight when InkBar looked have no picture yet. This
+                // is the moment they're drawn and not yet highlighted by the press.
+                if wasHidden {
+                    let button = Scanner.overflowButton()
+                    for (i, item) in items.enumerated() {
+                        await IconStore.shared.captureNow(IconStore.key(entry, i), frame: AX.frame(item), overflowButton: button)
+                    }
+                }
+                let baseline = Self.raisedWindows(pid: entry.pid)
+                // Pressing blocks until the menu closes, so it can't run on the main thread.
+                DispatchQueue.global(qos: .userInitiated).async { AXUIElementPerformAction(element, kAXPressAction as CFString) }
+                self.watchMenu(pid: entry.pid, ignoring: baseline, release: release)
+            }
         }
     }
 
-    /// Accessibility elements of a hidden item can be stale, so look the item up again.
-    private static func currentElement(_ entry: BarEntry, index: Int) -> AXUIElement? {
+    /// Accessibility elements of a hidden item can be stale, so look the items up again,
+    /// in the same order the scanner gives them.
+    private static func currentElements(_ entry: BarEntry) -> [AXUIElement] {
         let root = AXUIElementCreateApplication(entry.pid)
-        guard let bar = AX.attribute(root, "AXExtrasMenuBar") else { return nil }
-        var items = AX.statusItems(in: bar as! AXUIElement)
+        guard let bar = AX.attribute(root, "AXExtrasMenuBar") else { return [] }
+        let items = AX.statusItems(in: bar as! AXUIElement)
         if case .system(let raw) = entry.kind {
-            items = items.filter { AX.string($0, "AXIdentifier").flatMap { SystemItem.byIdentifier[$0] } == raw }
-            return items.first
+            return items.filter { AX.string($0, "AXIdentifier").flatMap { SystemItem.byIdentifier[$0] } == raw }
         }
-        items = items.filter { AX.string($0, "AXIdentifier").flatMap { SystemItem.byIdentifier[$0] } == nil }
-        items.sort { AX.frame($0).minX < AX.frame($1).minX }
-        return index < items.count ? items[index] : items.last
+        return items.filter { AX.string($0, "AXIdentifier").flatMap { SystemItem.byIdentifier[$0] } == nil }
+            .sorted { AX.frame($0).minX < AX.frame($1).minX }
     }
 
     /// Waits for the app's menu or popover to appear and then close. Gives up waiting for it
