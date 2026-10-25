@@ -163,13 +163,16 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     private func hoverMoved() {
-        guard settings.showOnHover, let screen = NSScreen.screens.first else { return }
+        guard settings.showOnHover, let screen = Screens.withPointer() else { return }
         let point = NSEvent.mouseLocation
-        let menuBarHeight = screen.frame.maxY - screen.visibleFrame.maxY
-        let inMenuBar = point.y >= screen.frame.maxY - menuBarHeight && screen.frame.contains(CGPoint(x: point.x, y: point.y - 1))
+        let inMenuBar = point.y >= screen.frame.maxY - Screens.menuBarHeight(screen) && screen.frame.contains(CGPoint(x: point.x, y: point.y - 1))
         // Only the empty stretch between the app menus and the first item, so hovering an item still works normally.
-        let firstItem = lastScan.entries.filter { !visibility.isConcealed($0.id) }.flatMap(\.elements).map(\.frame.minX).filter { $0 > 0 }.min() ?? screen.frame.maxX
-        let inGap = inMenuBar && point.x > lastScan.appMenuEnd + 8 && point.x < firstItem - 4
+        // Positions are reported for one display; every menu bar lays out the same way from its own edges.
+        let reference = Screens.menuBar(lastScan) ?? screen
+        let firstItem = lastScan.entries.filter { !visibility.isConcealed($0.id) }.flatMap(\.elements).map(\.frame.minX).filter { $0 > 0 }.min() ?? reference.frame.maxX
+        let itemsStart = screen.frame.maxX - (reference.frame.maxX - firstItem)
+        let menusEnd = screen.frame.minX + (lastScan.appMenuEnd - reference.frame.minX)
+        let inGap = inMenuBar && point.x > menusEnd + 8 && point.x < itemsStart - 4
 
         if bar.isVisible {
             if openedByHover && !inMenuBar && !bar.contains(point) { bar.hide() }

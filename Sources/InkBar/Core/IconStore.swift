@@ -49,13 +49,11 @@ final class IconStore {
     /// into its » menu keep reporting their last frame, so they are skipped.
     func capture(_ scan: ScanResult, isVisible: (BarEntry) -> Bool) {
         guard canCapture, #available(macOS 15.2, *) else { return }
-        let notch = Self.notchGap()
         for entry in scan.entries where isVisible(entry) {
             for (index, element) in entry.elements.enumerated() {
                 let frame = element.frame
-                guard frame.width > 2, frame.minY < 40 else { continue }
+                guard frame.width > 2, Screens.isInMenuBar(frame), !Screens.underNotch(frame) else { continue }
                 if let button = scan.overflowButton, frame.minX < button.maxX { continue }
-                if let notch, frame.maxX > notch.minX, frame.minX < notch.maxX { continue }
                 let key = Self.key(entry, index)
                 // Live items such as meters change constantly; refreshing once a minute is enough.
                 guard !inFlight.contains(key), Date().timeIntervalSince(capturedAt[key] ?? .distantPast) > 60 else { continue }
@@ -72,9 +70,8 @@ final class IconStore {
     /// Captures one item right away, for an item that's only briefly in the menu bar.
     @MainActor
     func captureNow(_ key: String, frame: CGRect, overflowButton: CGRect?) async {
-        guard canCapture, #available(macOS 15.2, *), frame.width > 2, frame.minY < 40 else { return }
+        guard canCapture, #available(macOS 15.2, *), frame.width > 2, Screens.isInMenuBar(frame), !Screens.underNotch(frame) else { return }
         if let overflowButton, frame.minX < overflowButton.maxX { return }
-        if let notch = Self.notchGap(), frame.maxX > notch.minX, frame.minX < notch.maxX { return }
         guard let image = try? await SCScreenshotManager.captureImage(in: frame) else { return }
         store(image, key)
     }
@@ -94,12 +91,6 @@ final class IconStore {
     private func file(_ key: String) -> URL {
         let digest = SHA256.hash(data: Data(key.utf8)).prefix(12).map { String(format: "%02x", $0) }.joined()
         return directory.appendingPathComponent("\(digest).png")
-    }
-
-    /// The area hidden behind the camera housing on the main screen, in top-left coordinates.
-    static func notchGap() -> CGRect? {
-        guard let screen = NSScreen.screens.first, let left = screen.auxiliaryTopLeftArea, let right = screen.auxiliaryTopRightArea else { return nil }
-        return CGRect(x: left.maxX, y: 0, width: right.minX - left.maxX, height: left.height)
     }
 
     /// The share of the mask that is mostly opaque.

@@ -67,12 +67,22 @@ final class SettingsModel: ObservableObject {
         Settings.shared.knownNames[entryID] ?? entryID
     }
 
-    func move(_ index: Int, by offset: Int) {
-        guard let app, layout.indices.contains(index + offset) else { return }
-        let row = layout[index], target = layout[index + offset]
+    /// Where a row dropped at `destination` (an insertion index, as SwiftUI reports it) lands:
+    /// next to which row, and on which side. Nil when it lands where it already was.
+    static func placement(from source: Int, to destination: Int) -> (target: Int, before: Bool)? {
+        if destination == source || destination == source + 1 { return nil }
+        return destination > source ? (destination - 1, false) : (destination, true)
+    }
+
+    func move(from source: Int, to destination: Int) {
+        guard let app, let (target, before) = Self.placement(from: source, to: destination),
+              layout.indices.contains(source), layout.indices.contains(target) else { return }
+        let row = layout[source], next = layout[target]
+        // Show the new order straight away; the scan after the drag confirms or corrects it.
+        layout.move(fromOffsets: IndexSet(integer: source), toOffset: destination)
         moving = true
         moveFailed = false
-        app.move(row.element, nextTo: target.element, before: offset < 0) { [weak self] ok in
+        app.move(row.element, nextTo: next.element, before: before) { [weak self] ok in
             self?.moving = false
             self?.moveFailed = !ok
             self?.refresh()
@@ -225,24 +235,26 @@ private struct LayoutSettings: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
-            Text("The items in the menu bar, left to right. Moving one drags it with ⌘ held, as you would by hand, so the pointer jumps for a moment. Hidden items keep their place and return to it.")
+            Text("The items in the menu bar, left to right. Drag a row to move that item: InkBar then drags it in the menu bar with ⌘ held, as you would by hand, so the pointer jumps for a moment. Hidden items keep their place and return to it.")
                 .font(.inkCallout).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
-            InkList {
-                ForEach(Array(model.layout.enumerated()), id: \.element.id) { index, row in
+            List {
+                ForEach(model.layout) { row in
                     HStack(spacing: 10) {
+                        Image(systemName: "line.3.horizontal").foregroundStyle(.secondary)
                         ItemIcon(icon: row.icon)
-                        Text(row.name)
+                        Text(row.name).font(.inkCallout)
                         Spacer()
-                        Button { model.move(index, by: -1) } label: { Image(systemName: "arrow.left") }
-                            .disabled(index == 0 || model.moving)
-                            .help("Move left")
-                        Button { model.move(index, by: 1) } label: { Image(systemName: "arrow.right") }
-                            .disabled(index == model.layout.count - 1 || model.moving)
-                            .help("Move right")
                     }
-                    .inkRow()
+                    .padding(.vertical, 4)
+                    .listRowBackground(Color.clear)
                 }
+                .onMove { rows, destination in
+                    if let source = rows.first { model.move(from: source, to: destination) }
+                }
+                .moveDisabled(model.moving)
             }
+            .listStyle(.plain)
+            .scrollContentBackground(.hidden)
             if model.moving { Text("Moving…").font(.inkCaption).foregroundStyle(.secondary) }
             if model.moveFailed { Text("That move didn't take. The menu bar may have been busy; try again.").font(.inkCaption).foregroundStyle(.red) }
         }

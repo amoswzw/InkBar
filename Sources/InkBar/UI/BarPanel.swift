@@ -49,9 +49,9 @@ final class BarPanelController {
         view.cells = cells
         view.query = search ? "" : nil
         let size = view.fittingSize
-        guard let screen = NSScreen.screens.first else { return }
-        let menuBarHeight = screen.frame.maxY - screen.visibleFrame.maxY
-        let origin = NSPoint(x: screen.frame.maxX - size.width - 8, y: screen.frame.maxY - menuBarHeight - size.height - 4)
+        // Wherever the pointer is: that's the display the click, shortcut or hover came from.
+        guard let screen = Screens.withPointer() else { return }
+        let origin = NSPoint(x: screen.frame.maxX - size.width - 8, y: screen.frame.maxY - Screens.menuBarHeight(screen) - size.height - 4)
         panel.setFrame(NSRect(origin: origin, size: size), display: true)
         panel.orderFrontRegardless()
         if search { panel.makeKey() }

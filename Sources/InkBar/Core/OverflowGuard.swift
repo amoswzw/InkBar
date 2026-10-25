@@ -66,11 +66,12 @@ final class OverflowGuard {
     }
 
     private func freeSpace(_ scan: ScanResult) -> CGFloat {
+        let screen = Screens.menuBar(scan)
         let left = scan.entries.filter(isDrawn)
-            .flatMap(\.elements).map(\.frame.minX).filter { $0 > 0 }.min() ?? NSScreen.screens.first?.frame.width ?? 0
+            .flatMap(\.elements).map(\.frame.minX).filter { $0 > 0 }.min() ?? screen?.frame.maxX ?? 0
         // macOS 27 doesn't reliably put items beside the app menus left of the camera housing;
         // it often collapses them into » instead, so only the room right of it counts.
-        guard let notch = IconStore.notchGap() else { return left - scan.appMenuEnd }
-        return left - notch.maxX
+        guard let notch = Screens.notchGap(screen) else { return left - scan.appMenuEnd }
+        return left - notch.upperBound
     }
 }

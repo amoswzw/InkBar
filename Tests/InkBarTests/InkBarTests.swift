@@ -1,3 +1,4 @@
+import AppKit
 import InkKit
 import XCTest
 @testable import InkBar
@@ -132,5 +133,25 @@ final class InkBarTests: XCTestCase {
         XCTAssertEqual(settings.knownNames["app:dev.inkstats.InkStats"], "InkStats")
         XCTAssertEqual(settings.knownNames["system:2"], "Clock")
         XCTAssertNil(settings.knownNames["app:pid.22048"], "a pid-keyed entry can't match a later session")
+    }
+
+    func testAccessibilityPointsMapToTheirDisplay() throws {
+        let primary = try XCTUnwrap(NSScreen.screens.first, "needs a display")
+        let height = Screens.menuBarHeight(primary)
+        try XCTSkipIf(height <= 0, "the menu bar is hidden")
+        XCTAssertEqual(Screens.containing(axPoint: CGPoint(x: primary.frame.minX + 20, y: 5)), primary)
+        let item = CGRect(x: primary.frame.maxX - 120, y: (height - 22) / 2, width: 30, height: 22)
+        XCTAssertTrue(Screens.isInMenuBar(item))
+        XCTAssertFalse(Screens.isInMenuBar(item.offsetBy(dx: 0, dy: primary.frame.height / 2)), "the middle of the screen isn't the menu bar")
+    }
+
+    func testDroppedRowsLandBesideTheRightNeighbour() {
+        // Rows a b c d; SwiftUI reports the insertion index in the original order.
+        XCTAssertNil(SettingsModel.placement(from: 1, to: 1), "dropped where it was")
+        XCTAssertNil(SettingsModel.placement(from: 1, to: 2), "dropped just after itself")
+        XCTAssertTrue(SettingsModel.placement(from: 3, to: 0)! == (0, true), "d before a")
+        XCTAssertTrue(SettingsModel.placement(from: 0, to: 4)! == (3, false), "a after d")
+        XCTAssertTrue(SettingsModel.placement(from: 0, to: 2)! == (1, false), "a after b")
+        XCTAssertTrue(SettingsModel.placement(from: 2, to: 1)! == (1, true), "c before b")
     }
 }
