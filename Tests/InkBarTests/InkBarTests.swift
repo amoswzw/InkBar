@@ -36,6 +36,23 @@ final class InkBarTests: XCTestCase {
         XCTAssertNil(settings.sections["app:test.one"], "shown is the default and isn't stored")
     }
 
+    func testAdHocAppIsNotTrusted() throws {
+        let app = FileManager.default.temporaryDirectory.appendingPathComponent("InkBarTest-\(UUID().uuidString).app")
+        defer { try? FileManager.default.removeItem(at: app) }
+        let macOS = app.appendingPathComponent("Contents/MacOS")
+        try FileManager.default.createDirectory(at: macOS, withIntermediateDirectories: true)
+        try FileManager.default.copyItem(atPath: "/usr/bin/true", toPath: macOS.appendingPathComponent("Probe").path)
+        let plist: [String: Any] = ["CFBundleIdentifier": "dev.inkbar.test.adhoc", "CFBundleExecutable": "Probe"]
+        try (plist as NSDictionary).write(to: app.appendingPathComponent("Contents/Info.plist"))
+        let sign = Process()
+        sign.executableURL = URL(fileURLWithPath: "/usr/bin/codesign")
+        sign.arguments = ["--sign", "-", "--force", app.path]
+        try sign.run()
+        sign.waitUntilExit()
+        XCTAssertEqual(sign.terminationStatus, 0)
+        XCTAssertFalse(Notarization.isTrusted(app))
+    }
+
     func testAppleAppsCountAsTrusted() {
         XCTAssertTrue(Notarization.isTrusted(URL(fileURLWithPath: "/System/Applications/Calculator.app")))
         XCTAssertTrue(Notarization.isTrusted(nil))

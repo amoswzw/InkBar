@@ -90,7 +90,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         scanning = false
         lastScan = result
         var names = settings.knownNames
-        for entry in result.entries where names[entry.id] != entry.name { names[entry.id] = entry.name }
+        // pid-keyed entries aren't stored, so counting them would rewrite the settings every scan.
+        for entry in result.entries where names[entry.id] != entry.name && !entry.id.hasPrefix("app:pid.") { names[entry.id] = entry.name }
         if names != settings.knownNames { settings.knownNames = names }
 
         IconStore.shared.capture(result) { entry in

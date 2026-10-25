@@ -18,7 +18,10 @@ enum Notarization {
         var requirement: SecRequirement?
         let ok = SecStaticCodeCreateWithPath(url as CFURL, [], &code) == errSecSuccess
             && SecRequirementCreateWithString(requirementText as CFString, [], &requirement) == errSecSuccess
-            && SecStaticCodeCheckValidity(code!, [], requirement) == errSecSuccess
+            // Checking the signature and its requirement is enough; validating every resource
+            // in a large bundle such as Xcode takes seconds on the main thread.
+            && SecStaticCodeCheckValidity(code!, SecCSFlags(rawValue: kSecCSDoNotValidateResources | kSecCSDoNotValidateExecutable),
+                                          requirement) == errSecSuccess
         cache[url] = ok
         return ok
     }
