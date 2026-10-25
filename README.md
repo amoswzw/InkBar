@@ -6,6 +6,15 @@ system's » overflow button never has to appear.
 
 Two themes, shared with [InkStats](../inkstats): 水墨 ink-wash and 手绘 Excalidraw.
 
+## Screenshots
+
+<p>
+<img src="docs/screenshots/1-ink-bar.png" width="900" alt="Hidden items in the ink bar">
+<img src="docs/screenshots/2-overflow.png" width="900" alt="Items that do not fit move to the ink bar">
+<img src="docs/screenshots/3-search.png" width="900" alt="Searching the ink bar">
+<img src="docs/screenshots/4-triggers.png" width="900" alt="Triggers and appearance settings">
+</p>
+
 ## Install
 
 ```sh
@@ -76,7 +85,8 @@ swift test
 ```
 
 Development flags: `--scan` prints what InkBar sees in the menu bar; `--render-icon <png>` and
-`--render-settings <dir>` render the icon and settings tabs to images.
+`--render-settings <dir>` render the icon and settings tabs to images; `--render-screenshots <dir>`
+draws the README screenshots from demo items.
 
 ## Layout
 

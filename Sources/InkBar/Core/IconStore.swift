@@ -30,6 +30,12 @@ final class IconStore {
         return image
     }
 
+    /// Uses a picture without capturing or saving it, for the README screenshots.
+    func preload(_ image: CGImage, for key: String) {
+        images[key] = image
+        masks[key] = nil
+    }
+
     /// The icon as an alpha mask: how far each pixel stands out from the menu bar behind it.
     func mask(_ key: String) -> CGImage? {
         if let mask = masks[key] { return mask }

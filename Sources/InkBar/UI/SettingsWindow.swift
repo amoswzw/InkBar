@@ -657,8 +657,29 @@ private struct PermissionSettings: View {
     }
 }
 
-/// Renders each settings tab to a PNG without showing a window, for checking the layout.
+/// Renders settings tabs without showing a window, for checking the layout and for screenshots.
 enum SettingsPreview {
+    static func image(_ tab: String, size: CGSize, model: SettingsModel = SettingsModel()) -> NSImage? {
+        let view: AnyView
+        switch tab {
+        case "triggers": view = AnyView(TriggerSettings(model: model))
+        case "appearance": view = AnyView(AppearanceSettings())
+        default: return nil
+        }
+        let host = NSHostingView(rootView: view.padding(20).frame(width: size.width, height: size.height))
+        host.frame = NSRect(origin: .zero, size: size)
+        let window = NSWindow(contentRect: host.frame, styleMask: .borderless, backing: .buffered, defer: false)
+        window.appearance = NSAppearance(named: .aqua)
+        window.contentView = host
+        host.layoutSubtreeIfNeeded()
+        RunLoop.main.run(until: Date().addingTimeInterval(0.3))
+        guard let rep = host.bitmapImageRepForCachingDisplay(in: host.bounds) else { return nil }
+        host.cacheDisplay(in: host.bounds, to: rep)
+        let image = NSImage(size: size)
+        image.addRepresentation(rep)
+        return image
+    }
+
     static func render(to directory: URL) {
         let model = SettingsModel()
         model.rows = [

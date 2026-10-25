@@ -24,6 +24,12 @@ if let index = CommandLine.arguments.firstIndex(of: "--render-icon"), index + 1 
     exit(0)
 }
 
+if let index = CommandLine.arguments.firstIndex(of: "--render-screenshots"), index + 1 < CommandLine.arguments.count {
+    _ = NSApplication.shared
+    Screenshots.run(output: URL(fileURLWithPath: CommandLine.arguments[index + 1]))
+    exit(0)
+}
+
 if let index = CommandLine.arguments.firstIndex(of: "--render-settings"), index + 1 < CommandLine.arguments.count {
     _ = NSApplication.shared
     SettingsPreview.render(to: URL(fileURLWithPath: CommandLine.arguments[index + 1]))
