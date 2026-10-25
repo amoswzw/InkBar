@@ -44,6 +44,12 @@ final class Settings {
         set { defaults.set(newValue, forKey: "texture") }
     }
 
+    /// Opacity of the ink bar's paper background; below 1 the desktop shows through it.
+    var barOpacity: Double {
+        get { defaults.object(forKey: "barOpacity") as? Double ?? 1 }
+        set { defaults.set(newValue, forKey: "barOpacity") }
+    }
+
     /// Entry id → section. Entries missing here are shown.
     var sections: [String: Section] {
         get {

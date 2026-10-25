@@ -480,6 +480,7 @@ private struct AppearanceSettings: View {
     @AppStorage("theme") private var theme = ThemeID.ink.rawValue
     @AppStorage("appearance") private var appearance = PanelAppearance.system.rawValue
     @AppStorage("inkIcons") private var inkIcons = true
+    @AppStorage("barOpacity") private var barOpacity = 1.0
     @State private var style = Settings.shared.style
     @State private var spacing = ItemSpacing.current
 
@@ -496,6 +497,10 @@ private struct AppearanceSettings: View {
                     Text("Dark").tag(PanelAppearance.dark.rawValue)
                 }
                 Toggle("Draw icons in ink", isOn: $inkIcons)
+                Slider(value: $barOpacity, in: 0.3...1) { Text("Paper opacity") }
+                    .onChange(of: barOpacity) { _, _ in changed() }
+                Text("A lower opacity lets the desktop show through the bar's paper.")
+                    .font(.inkCaption).foregroundStyle(.secondary)
             } header: { InkSectionHeader(chinese: "墨栏", english: "Ink bar") }
             SwiftUI.Section {
                 Picker("Fill", selection: $style.fill) {

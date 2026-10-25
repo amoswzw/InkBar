@@ -219,16 +219,20 @@ final class BarView: NSView {
 
     private func drawBackground(_ ctx: CGContext) {
         let pal = painter.palette
+        let opacity = CGFloat(Settings.shared.barOpacity)
         switch painter.theme {
         case .ink:
             let shape = CGPath(roundedRect: bounds, cornerWidth: 5, cornerHeight: 5, transform: nil)
             ctx.saveGState()
             ctx.addPath(shape)
             ctx.clip()
-            ctx.setFillColor(pal.paper)
+            ctx.setFillColor(pal.paper.copy(alpha: opacity)!)
             ctx.fill(bounds)
             if paper?.dark != pal.isDark, let tile = InkBrush.paperTile(pal) { paper = (pal.isDark, tile) }
-            if let tile = paper?.image { ctx.draw(tile, in: CGRect(x: 0, y: 0, width: tile.width, height: tile.height), byTiling: true) }
+            if let tile = paper?.image {
+                ctx.setAlpha(opacity)
+                ctx.draw(tile, in: CGRect(x: 0, y: 0, width: tile.width, height: tile.height), byTiling: true)
+            }
             ctx.restoreGState()
             ctx.saveGState()
             ctx.setStrokeColor(pal.ink.copy(alpha: 0.12)!)
@@ -236,7 +240,7 @@ final class BarView: NSView {
             ctx.strokePath()
             ctx.restoreGState()
         case .sketch:
-            ctx.setFillColor(pal.paper)
+            ctx.setFillColor(pal.paper.copy(alpha: opacity)!)
             ctx.fill(bounds)
             painter.outline(ctx, bounds.insetBy(dx: 3, dy: 3), color: pal.ink, width: 1.6, seed: 400, roughness: min(1.2, painter.texture))
         }
