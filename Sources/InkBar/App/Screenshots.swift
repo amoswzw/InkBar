@@ -195,8 +195,8 @@ enum Screenshots {
         let mid = CGPoint(x: (from.x + to.x) / 2 + 40, y: (from.y + to.y) / 2)
         InkBrush.stroke(ctx, [CGPoint(x: from.x, y: from.y - 10), mid, to], width: 7, color: red, paper: nil, seed: 12, texture: 0.6)
         let angle = atan2(to.y - mid.y, to.x - mid.x)
-        for side in [-1.0, 1.0] {
-            let a = angle + .pi + side * 0.45
+        for side: CGFloat in [-1, 1] {
+            let a: CGFloat = angle + .pi + side * 0.45
             InkBrush.stroke(ctx, [to, CGPoint(x: to.x + cos(a) * 46, y: to.y + sin(a) * 46)], width: 7, color: red, paper: nil, seed: 13, texture: 0.6)
         }
     }
