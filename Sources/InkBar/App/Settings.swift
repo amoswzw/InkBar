@@ -67,9 +67,10 @@ final class Settings {
     }
 
     /// Names of entries seen before, so the settings list can show apps that aren't running.
+    /// pid-keyed entries can never match a later session, so they don't persist.
     var knownNames: [String: String] {
         get { defaults.dictionary(forKey: "knownNames") as? [String: String] ?? [:] }
-        set { defaults.set(newValue, forKey: "knownNames") }
+        set { defaults.set(newValue.filter { !$0.key.hasPrefix("app:pid.") }, forKey: "knownNames") }
     }
 
     var showOnHover: Bool {

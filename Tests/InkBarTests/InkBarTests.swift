@@ -105,4 +105,14 @@ final class InkBarTests: XCTestCase {
         XCTAssertEqual(Shortcut.defaultBar.display, "⌥⌘B")
         XCTAssertEqual(Shortcut(keyCode: 49, modifiers: 0x1000).display, "⌃Space")
     }
+
+    func testKnownNamesDropPidEntries() {
+        let settings = Settings.shared
+        let saved = settings.knownNames
+        defer { settings.knownNames = saved }
+        settings.knownNames = ["app:dev.inkstats.InkStats": "InkStats", "app:pid.22048": "InkStats", "system:2": "Clock"]
+        XCTAssertEqual(settings.knownNames["app:dev.inkstats.InkStats"], "InkStats")
+        XCTAssertEqual(settings.knownNames["system:2"], "Clock")
+        XCTAssertNil(settings.knownNames["app:pid.22048"], "a pid-keyed entry can't match a later session")
+    }
 }
