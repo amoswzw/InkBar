@@ -18,11 +18,29 @@ final class VisibilityController {
 
     static var isSupported: Bool { IBVisibilityRestriction.isAvailable() }
 
+    /// Every installed app is on the list from the start, so launching one doesn't change the
+    /// list, and each change makes the menu bar rebuild all of its items.
+    private lazy var installed: Set<String> = Self.installedBundleIDs()
+
     init() {
-        // A newly launched app is missing from the allowlist, so it would start out hidden.
-        NotificationCenter.default.addObserver(forName: NSWorkspace.didLaunchApplicationNotification, object: nil, queue: .main) { [weak self] _ in
-            self?.update()
+        // An app that isn't installed, run from a disk image say, is missing from the list and would start out hidden.
+        NSWorkspace.shared.notificationCenter.addObserver(forName: NSWorkspace.didLaunchApplicationNotification, object: nil, queue: .main) { [weak self] note in
+            guard let self, let bundle = (note.userInfo?[NSWorkspace.applicationUserInfoKey] as? NSRunningApplication)?.bundleIdentifier,
+                  !self.installed.contains(bundle) else { return }
+            self.update()
         }
+    }
+
+    private static func installedBundleIDs() -> Set<String> {
+        let folders = ["/Applications", "/Applications/Utilities", "/System/Applications", "/System/Applications/Utilities",
+                       "/System/Library/CoreServices", NSHomeDirectory() + "/Applications"]
+        var ids = Set<String>()
+        for folder in folders {
+            for name in (try? FileManager.default.contentsOfDirectory(atPath: folder)) ?? [] where name.hasSuffix(".app") {
+                if let id = Bundle(path: folder + "/" + name)?.bundleIdentifier { ids.insert(id) }
+            }
+        }
+        return ids
     }
 
     func isRevealed(_ id: String) -> Bool { reveals[id] != nil }
@@ -46,19 +64,22 @@ final class VisibilityController {
         }
     }
 
-    func overflow(_ id: String) {
-        guard !overflowed.contains(id) else { return }
-        overflowed.append(id)
+    /// Every change makes the menu bar rebuild all its items, so overflow arrives in one batch.
+    func overflow(_ ids: [String]) {
+        let new = ids.filter { !overflowed.contains($0) }
+        guard !new.isEmpty else { return }
+        overflowed += new
         update()
     }
 
-    func releaseOverflow(_ id: String) {
-        overflowed.removeAll { $0 == id }
+    func releaseOverflow(_ ids: [String]) {
+        guard !ids.isEmpty else { return }
+        overflowed.removeAll { ids.contains($0) }
         update()
     }
 
     func update() {
-        var bundles = Set(NSWorkspace.shared.runningApplications.compactMap(\.bundleIdentifier))
+        var bundles = installed.union(NSWorkspace.shared.runningApplications.compactMap(\.bundleIdentifier))
         bundles.formUnion(Settings.shared.knownNames.keys.compactMap { $0.hasPrefix("app:") ? String($0.dropFirst(4)) : nil })
         let concealedApps = bundles.filter { isConcealed("app:\($0)") }
         let concealedSystem = SystemItem.all.filter { isConcealed("system:\($0)") }
