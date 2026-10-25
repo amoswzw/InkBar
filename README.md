@@ -96,7 +96,7 @@ draws the README screenshots from demo items.
 Sources/CMenuBar/          the allowlist wrapper (Objective-C, loads MenuBarClientCore at runtime)
 Sources/InkBar/Core/       scanning, hiding, overflow, activation, moving, triggers, icons, hotkeys
 Sources/InkBar/UI/         ink bar, settings, menu bar styling
-Sources/InkBar/Render/     ink-wash and sketch drawing, shared with InkStats; the app icon
+Sources/InkBar/Render/     the app icon; ink-wash and sketch drawing come from InkKit
 ```
 
 MIT License.

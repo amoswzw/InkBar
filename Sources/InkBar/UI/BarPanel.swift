@@ -1,3 +1,4 @@
+import InkKit
 import AppKit
 
 /// One status item drawn in the ink bar.

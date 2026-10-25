@@ -1,3 +1,4 @@
+import InkKit
 import AppKit
 
 /// Keeps the menu bar from overflowing. macOS shows its » button when items don't fit and

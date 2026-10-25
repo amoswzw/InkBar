@@ -1,3 +1,4 @@
+import InkKit
 import AppKit
 
 if CommandLine.arguments.contains("--scan") {

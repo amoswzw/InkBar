@@ -1,3 +1,4 @@
+import InkKit
 import AppKit
 
 /// Rearranges menu bar items the way a person does: by dragging them with ⌘ held.

@@ -1,3 +1,4 @@
+import InkKit
 import AppKit
 
 /// The app icon: an ensō on xuan paper with a vermilion seal, in the macOS rounded-square shape.

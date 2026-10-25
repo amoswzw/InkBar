@@ -1,3 +1,4 @@
+import InkKit
 import AppKit
 
 /// Decorates the menu bar. Its background is opaque on many setups, so a window behind it
