@@ -31,6 +31,7 @@ final class SettingsModel: ObservableObject {
     @Published var error: String?
     @Published var hidingActive = false
     @Published var selfTrusted = Notarization.isTrusted(Bundle.main.bundleURL)
+    @Published var page = "items"
 
     weak var app: AppDelegate?
     weak var visibility: VisibilityController?
@@ -85,14 +86,13 @@ final class SettingsWindowController {
     init(app: AppDelegate, visibility: VisibilityController) {
         model.app = app
         model.visibility = visibility
-        window = NSWindow(contentRect: NSRect(x: 0, y: 0, width: 640, height: 560), styleMask: [.titled, .closable], backing: .buffered, defer: false)
-        window.title = "InkBar"
-        window.isReleasedWhenClosed = false
-        window.contentViewController = NSHostingController(rootView: SettingsView(model: model))
-        window.center()
+        window = makeInkSettingsWindow(title: "InkBar", size: CGSize(width: 860, height: 600), root: SettingsView(model: model))
     }
 
-    func show() {
+    var isVisible: Bool { window.isVisible }
+
+    func show(page: String? = nil) {
+        if let page { model.page = page }
         model.refresh()
         NSApp.activate(ignoringOtherApps: true)
         window.makeKeyAndOrderFront(nil)
@@ -110,18 +110,33 @@ private func changed() {
 struct SettingsView: View {
     @ObservedObject var model: SettingsModel
 
+    static let pages = [
+        InkPage(id: "items", chinese: "图标", english: "Items"),
+        InkPage(id: "layout", chinese: "排序", english: "Layout"),
+        InkPage(id: "triggers", chinese: "触发", english: "Triggers"),
+        InkPage(id: "profiles", chinese: "方案", english: "Profiles"),
+        InkPage(id: "appearance", chinese: "外观", english: "Appearance"),
+        InkPage(id: "general", chinese: "通用", english: "General"),
+        InkPage(id: "permissions", chinese: "权限", english: "Permissions"),
+    ]
+
     var body: some View {
-        TabView {
-            ItemsSettings(model: model).tabItem { Text("Items") }
-            LayoutSettings(model: model).tabItem { Text("Layout") }
-            TriggerSettings(model: model).tabItem { Text("Triggers") }
-            ProfileSettings(model: model).tabItem { Text("Profiles") }
-            AppearanceSettings().tabItem { Text("Appearance") }
-            GeneralSettings().tabItem { Text("General") }
-            PermissionSettings(model: model).tabItem { Text("Permissions") }
+        InkSettingsShell(seal: "栏", appChinese: "墨栏", appEnglish: "InkBar", pages: Self.pages, selection: $model.page) { page in
+            Group {
+                switch page {
+                case "layout": LayoutSettings(model: model)
+                case "triggers": TriggerSettings(model: model)
+                case "profiles": ProfileSettings(model: model)
+                case "appearance": AppearanceSettings()
+                case "general": GeneralSettings()
+                case "permissions": PermissionSettings(model: model)
+                default: ItemsSettings(model: model)
+                }
+            }
+            .padding(.horizontal, 14)
+            .padding(.vertical, 10)
         }
-        .padding(16)
-        .frame(width: 640, height: 560)
+        .frame(minWidth: 860, minHeight: 600)
     }
 }
 
@@ -156,25 +171,27 @@ private struct ItemsSettings: View {
                 Text(error).foregroundStyle(.red)
             }
             Text("Hidden items live in the ink bar: click the ensō in the menu bar, press \(Settings.shared.barShortcut.display), or search with \(Settings.shared.searchShortcut.display). Always-hidden items appear there when you hold ⌥ or search.")
-                .font(.callout).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
-            List {
+                .font(.inkCallout).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
+            InkList {
                 ForEach(Section.allCases, id: \.self) { section in
-                    SwiftUI.Section(section.title(chinese: false)) {
-                        ForEach(model.rows.filter { Settings.shared.section($0.id) == section }) { row in
-                            ItemRow(row: row) { new in
-                                Settings.shared.setSection(new, for: row.id)
-                                changed()
-                                revision += 1
-                                model.refresh()
-                            }
+                    InkSectionHeader(chinese: section.title(chinese: true), english: section.title(chinese: false))
+                        .padding(.top, 14)
+                        .padding(.bottom, 2)
+                    ForEach(model.rows.filter { Settings.shared.section($0.id) == section }) { row in
+                        ItemRow(row: row) { new in
+                            Settings.shared.setSection(new, for: row.id)
+                            changed()
+                            revision += 1
+                            model.refresh()
                         }
+                        .inkRow()
                     }
                 }
             }
             .id(revision)
             if model.hidingActive && model.rows.contains(where: { $0.running && !$0.trusted }) {
                 Text("● Apps marked with a red dot aren't notarized. While anything is hidden, macOS hides their items too; they wait in the ink bar and still open from there.")
-                    .font(.caption).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
+                    .font(.inkCaption).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
             }
         }
     }
@@ -189,7 +206,7 @@ private struct ItemRow: View {
             ItemIcon(icon: row.icon)
             Text(row.name).foregroundStyle(row.running ? .primary : .secondary)
             if !row.trusted { Text("●").foregroundStyle(.red).help("Not notarized") }
-            if row.overflowed { Text("moved to the ink bar to make room").font(.caption).foregroundStyle(.secondary) }
+            if row.overflowed { Text("moved to the ink bar to make room").font(.inkCaption).foregroundStyle(.secondary) }
             Spacer()
             Picker("", selection: Binding(get: { Settings.shared.section(row.id) }, set: move)) {
                 ForEach(Section.allCases, id: \.self) { Text($0.title(chinese: false)).tag($0) }
@@ -208,8 +225,8 @@ private struct LayoutSettings: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
             Text("The items in the menu bar, left to right. Moving one drags it with ⌘ held, as you would by hand, so the pointer jumps for a moment. Hidden items keep their place and return to it.")
-                .font(.callout).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
-            List {
+                .font(.inkCallout).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
+            InkList {
                 ForEach(Array(model.layout.enumerated()), id: \.element.id) { index, row in
                     HStack(spacing: 10) {
                         ItemIcon(icon: row.icon)
@@ -222,10 +239,11 @@ private struct LayoutSettings: View {
                             .disabled(index == model.layout.count - 1 || model.moving)
                             .help("Move right")
                     }
+                    .inkRow()
                 }
             }
-            if model.moving { Text("Moving…").font(.caption).foregroundStyle(.secondary) }
-            if model.moveFailed { Text("That move didn't take. The menu bar may have been busy; try again.").font(.caption).foregroundStyle(.red) }
+            if model.moving { Text("Moving…").font(.inkCaption).foregroundStyle(.secondary) }
+            if model.moveFailed { Text("That move didn't take. The menu bar may have been busy; try again.").font(.inkCaption).foregroundStyle(.red) }
         }
     }
 }
@@ -283,14 +301,15 @@ private struct TriggerSettings: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
             Text("While a condition holds, a hidden item comes back to the menu bar, or InkBar switches to a profile when it starts to hold.")
-                .font(.callout).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
-            List {
+                .font(.inkCallout).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
+            InkList {
                 ForEach($triggers) { $trigger in
                     TriggerRow(trigger: $trigger, model: model) {
                         triggers.removeAll { $0.id == trigger.id }
                         save()
                     }
                     .onChange(of: trigger) { _, _ in save() }
+                    .inkRow()
                 }
             }
             HStack {
@@ -301,7 +320,7 @@ private struct TriggerSettings: View {
                 }
                 Spacer()
                 if model.locationDenied && triggers.contains(where: { $0.condition.needsLocation }) {
-                    Text("Wi-Fi names need Location access for InkBar in System Settings → Privacy.").font(.caption).foregroundStyle(.red)
+                    Text("Wi-Fi names need Location access for InkBar in System Settings → Privacy.").font(.inkCaption).foregroundStyle(.red)
                 }
             }
         }
@@ -409,12 +428,12 @@ private struct ProfileSettings: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
             Text("A profile remembers which items are shown, hidden and always hidden. Switch from the ensō's right-click menu, or let a trigger switch for you.")
-                .font(.callout).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
-            List {
+                .font(.inkCallout).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
+            InkList {
                 ForEach(profiles.keys.sorted(), id: \.self) { name in
                     HStack {
                         Text(name).fontWeight(name == active ? .semibold : .regular)
-                        if name == active { Text("active").font(.caption).foregroundStyle(.secondary) }
+                        if name == active { Text("active").font(.inkCaption).foregroundStyle(.secondary) }
                         Spacer()
                         Button("Apply") {
                             model.app?.applyProfile(name)
@@ -434,6 +453,7 @@ private struct ProfileSettings: View {
                         } label: { Image(systemName: "trash") }
                         .buttonStyle(.borderless)
                     }
+                    .inkRow()
                 }
             }
             HStack {
@@ -465,7 +485,7 @@ private struct AppearanceSettings: View {
 
     var body: some View {
         Form {
-            SwiftUI.Section("Ink bar") {
+            SwiftUI.Section {
                 Picker("Theme", selection: $theme) {
                     ForEach(ThemeID.allCases, id: \.rawValue) { Text($0.title).tag($0.rawValue) }
                 }
@@ -476,8 +496,8 @@ private struct AppearanceSettings: View {
                     Text("Dark").tag(PanelAppearance.dark.rawValue)
                 }
                 Toggle("Draw icons in ink", isOn: $inkIcons)
-            }
-            SwiftUI.Section("Menu bar") {
+            } header: { InkSectionHeader(chinese: "墨栏", english: "Ink bar") }
+            SwiftUI.Section {
                 Picker("Fill", selection: $style.fill) {
                     Text("None").tag(MenuBarStyle.Fill.none)
                     Text("Tint").tag(MenuBarStyle.Fill.tint)
@@ -488,24 +508,24 @@ private struct AppearanceSettings: View {
                 }
                 if style.fill != .none {
                     Slider(value: $style.strength, in: 0.05...0.4) { Text("Strength") }
-                    Text("The fill lies over the items, so a strong one dims them.").font(.caption).foregroundStyle(.secondary)
+                    Text("The fill lies over the items, so a strong one dims them.").font(.inkCaption).foregroundStyle(.secondary)
                 }
                 Toggle("Brush line along the bottom", isOn: $style.brushLine)
                 Toggle("Shadow below", isOn: $style.shadow)
-            }
+            } header: { InkSectionHeader(chinese: "菜单栏", english: "Menu bar") }
             .onChange(of: style) { _, new in
                 Settings.shared.style = new
                 changed()
             }
-            SwiftUI.Section("Item spacing") {
+            SwiftUI.Section {
                 Picker("Spacing", selection: $spacing) {
                     Text("System default").tag(Int?.none)
                     ForEach([0, 2, 4, 6, 8, 10, 12, 16], id: \.self) { Text("\($0) pt").tag(Int?.some($0)) }
                 }
                 .onChange(of: spacing) { _, new in ItemSpacing.set(new) }
                 Text("Apps read this when they open: each app picks it up the next time it starts, and all of them after you log out and back in.")
-                    .font(.caption).foregroundStyle(.secondary)
-            }
+                    .font(.inkCaption).foregroundStyle(.secondary)
+            } header: { InkSectionHeader(chinese: "间距", english: "Item spacing") }
         }
         .formStyle(.grouped)
     }
@@ -537,7 +557,7 @@ private struct GeneralSettings: View {
             Toggle("Move items that don't fit into the ink bar", isOn: $autoOverflow)
                 .onChange(of: autoOverflow) { _, _ in changed() }
             Text("Instead of collapsing them behind the system's » button, InkBar keeps them in the ink bar and puts them back when the menu bar has room.")
-                .font(.caption).foregroundStyle(.secondary)
+                .font(.inkCaption).foregroundStyle(.secondary)
             LabeledContent("Show hidden items") {
                 ShortcutRecorder(shortcut: $barShortcut).frame(width: 120, height: 24)
             }
@@ -621,39 +641,90 @@ private struct ShortcutRecorder: NSViewRepresentable {
 
 // MARK: Permissions
 
+/// A guide through the permissions, each a step with a button straight to its pane in System Settings.
 private struct PermissionSettings: View {
     @ObservedObject var model: SettingsModel
+    @Environment(\.inkLook) private var look
+    private let tick = Timer.publish(every: 1, on: .main, in: .common).autoconnect()
 
     var body: some View {
-        Form {
-            LabeledContent("Accessibility") {
-                if model.accessibility { Text("Granted") } else {
-                    Button("Grant…") {
+        ScrollView {
+            VStack(alignment: .leading, spacing: 22) {
+                Text(model.accessibility && model.screenRecording
+                     ? "Everything InkBar needs is granted."
+                     : "InkBar needs two permissions before it can tidy the menu bar. Turn InkBar on in each pane, then come back here.")
+                    .foregroundStyle(look.sub)
+                    .fixedSize(horizontal: false, vertical: true)
+
+                PermissionStep(number: "一", title: "Accessibility", granted: model.accessibility,
+                               why: "Reads the menu bar's items, opens their menus when you click them in the ink bar, and drags them when you rearrange.") {
+                    Button("Open Accessibility Settings") {
                         AXIsProcessTrustedWithOptions([kAXTrustedCheckOptionPrompt.takeUnretainedValue() as String: true] as CFDictionary)
+                        open("Privacy_Accessibility")
                     }
                 }
-            }
-            Text("Reads the menu bar's items, opens their menus when you click them in the ink bar, and drags them when you rearrange the layout.")
-                .font(.caption).foregroundStyle(.secondary)
-            LabeledContent("Screen Recording") {
-                if model.screenRecording { Text("Granted") } else {
-                    Button("Grant…") { CGRequestScreenCaptureAccess() }
+                PermissionStep(number: "二", title: "Screen Recording", granted: model.screenRecording,
+                               why: "Captures each item's picture while it's visible, so the ink bar can draw it once hidden. Only the menu bar is captured, and the pictures stay on this Mac. macOS applies this permission when InkBar next starts.") {
+                    Button("Open Screen Recording Settings") {
+                        CGRequestScreenCaptureAccess()
+                        open("Privacy_ScreenCapture")
+                    }
+                    Button("Restart InkBar", action: restart)
+                }
+                PermissionStep(number: "三", title: "Location (optional)", granted: !model.locationDenied, optional: true,
+                               why: "Asked only if you add a trigger on a Wi-Fi network name, since macOS treats network names as location.") {
+                    EmptyView()
+                }
+                if !model.selfTrusted {
+                    Text("This copy of InkBar isn't notarized, so macOS hides its own ensō while anything is hidden. Use \(Settings.shared.barShortcut.display) to open the ink bar.")
+                        .font(look.text(12)).foregroundStyle(look.red)
                 }
             }
-            Text("Captures each item's picture while it's visible, so the ink bar can draw it after it's hidden. Only the menu bar is captured, and the pictures stay on this Mac.")
-                .font(.caption).foregroundStyle(.secondary)
-            LabeledContent("Location") {
-                Text(model.locationDenied ? "Denied" : "Asked only for Wi-Fi triggers")
-            }
-            Text("macOS treats Wi-Fi network names as location data, so a trigger on a network name needs it.")
-                .font(.caption).foregroundStyle(.secondary)
-            if !model.selfTrusted {
-                Text("This copy of InkBar isn't notarized, so macOS hides its own ensō while anything is hidden. Use \(Settings.shared.barShortcut.display) to open the ink bar.")
-                    .font(.caption).foregroundStyle(.orange)
-            }
-            Button("Check Again") { model.refresh() }
+            .padding(.horizontal, 14)
+            .padding(.vertical, 10)
         }
-        .formStyle(.grouped)
+        .onReceive(tick) { _ in model.refresh() }
+    }
+
+    private func open(_ pane: String) {
+        NSWorkspace.shared.open(URL(string: "x-apple.systempreferences:com.apple.preference.security?\(pane)")!)
+    }
+
+    /// macOS only grants Screen Recording to a fresh process.
+    private func restart() {
+        let task = Process()
+        task.executableURL = URL(fileURLWithPath: "/bin/sh")
+        task.arguments = ["-c", "sleep 1; /usr/bin/open \"\(Bundle.main.bundlePath)\""]
+        try? task.run()
+        NSApp.terminate(nil)
+    }
+}
+
+private struct PermissionStep<Actions: View>: View {
+    @Environment(\.inkLook) private var look
+    let number: String
+    let title: String
+    let granted: Bool
+    var optional = false
+    let why: String
+    @ViewBuilder let actions: () -> Actions
+
+    var body: some View {
+        HStack(alignment: .top, spacing: 16) {
+            InkSeal(character: number, size: 36)
+            VStack(alignment: .leading, spacing: 8) {
+                HStack(alignment: .firstTextBaseline) {
+                    Text(title).font(look.text(16, weight: .semibold))
+                    Spacer()
+                    Text(granted ? (optional ? "Not needed yet" : "Granted") : "Not yet granted")
+                        .font(look.text(12))
+                        .foregroundStyle(granted ? look.sub : look.red)
+                }
+                Text(why).font(look.text(12)).foregroundStyle(look.sub).fixedSize(horizontal: false, vertical: true)
+                if !granted { HStack(spacing: 10) { actions() } }
+                InkRule(seed: number.unicodeScalars.first.map { Int($0.value % 97) } ?? 1).padding(.top, 6)
+            }
+        }
     }
 }
 
@@ -689,25 +760,28 @@ enum SettingsPreview {
         ]
         model.layout = model.rows.map { .init(element: ElementID(entry: $0.id, index: 0), name: $0.name, icon: nil) }
         model.hidingActive = true
-        let tabs: [(String, AnyView)] = [
-            ("items", AnyView(ItemsSettings(model: model))),
-            ("layout", AnyView(LayoutSettings(model: model))),
-            ("triggers", AnyView(TriggerSettings(model: model))),
-            ("profiles", AnyView(ProfileSettings(model: model))),
-            ("appearance", AnyView(AppearanceSettings())),
-            ("general", AnyView(GeneralSettings())),
-            ("permissions", AnyView(PermissionSettings(model: model))),
-        ]
-        for (name, view) in tabs {
-            let host = NSHostingView(rootView: view.padding(16).frame(width: 640, height: 520))
-            host.frame = NSRect(x: 0, y: 0, width: 640, height: 520)
-            let window = NSWindow(contentRect: host.frame, styleMask: .borderless, backing: .buffered, defer: false)
-            window.contentView = host
-            host.layoutSubtreeIfNeeded()
-            RunLoop.main.run(until: Date().addingTimeInterval(0.3))
-            guard let rep = host.bitmapImageRepForCachingDisplay(in: host.bounds) else { continue }
-            host.cacheDisplay(in: host.bounds, to: rep)
-            try? rep.representation(using: .png, properties: [:])?.write(to: directory.appendingPathComponent("settings-\(name).png"))
+        model.accessibility = false
+        let saved = UserDefaults.standard.string(forKey: "theme")
+        defer { UserDefaults.standard.set(saved, forKey: "theme") }
+        for theme in ThemeID.allCases {
+            UserDefaults.standard.set(theme.rawValue, forKey: "theme")
+            for dark in [false, true] {
+                for page in SettingsView.pages {
+                    model.page = page.id
+                    let size = CGSize(width: 860, height: 600)
+                    let host = NSHostingView(rootView: SettingsView(model: model))
+                    host.frame = NSRect(origin: .zero, size: size)
+                    let window = NSWindow(contentRect: host.frame, styleMask: .borderless, backing: .buffered, defer: false)
+                    window.appearance = NSAppearance(named: dark ? .darkAqua : .aqua)
+                    window.contentView = host
+                    host.layoutSubtreeIfNeeded()
+                    RunLoop.main.run(until: Date().addingTimeInterval(0.3))
+                    guard let rep = host.bitmapImageRepForCachingDisplay(in: host.bounds) else { continue }
+                    host.cacheDisplay(in: host.bounds, to: rep)
+                    let name = "settings-\(theme.rawValue)-\(dark ? "dark" : "light")-\(page.id).png"
+                    try? rep.representation(using: .png, properties: [:])?.write(to: directory.appendingPathComponent(name))
+                }
+            }
         }
     }
 }

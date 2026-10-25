@@ -66,7 +66,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         }
         Timer.scheduledTimer(withTimeInterval: 2, repeats: true) { [weak self] _ in self?.scan() }
 
-        if !AXIsProcessTrusted() || !IconStore.shared.canCapture || !VisibilityController.isSupported { openSettings() }
+        if !AXIsProcessTrusted() || !IconStore.shared.canCapture { openSettings(page: "permissions") }
+        else if !VisibilityController.isSupported { openSettings(page: nil) }
         scan()
     }
 
@@ -204,7 +205,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             menu.addItem(withTitle: "Profile", action: nil, keyEquivalent: "").submenu = profiles
         }
         menu.addItem(.separator())
-        menu.addItem(withTitle: "Settings…", action: #selector(openSettings), keyEquivalent: ",").target = self
+        menu.addItem(withTitle: "Settings…", action: #selector(openSettingsFromMenu), keyEquivalent: ",").target = self
         menu.addItem(withTitle: "Quit InkBar", action: #selector(NSApplication.terminate(_:)), keyEquivalent: "q")
         statusItem.menu = menu
         sender.performClick(nil)
@@ -253,11 +254,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         }
     }
 
-    @objc func openSettings() {
+    @objc func openSettingsFromMenu() { openSettings(page: nil) }
+
+    func openSettings(page: String?) {
         if settingsWindow == nil {
             settingsWindow = SettingsWindowController(app: self, visibility: visibility)
         }
-        settingsWindow?.show()
+        settingsWindow?.show(page: page)
     }
 
     /// An ensō, the single brush circle, drawn as a template so the menu bar tints it.
