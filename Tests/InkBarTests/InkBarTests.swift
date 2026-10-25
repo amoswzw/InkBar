@@ -154,4 +154,21 @@ final class InkBarTests: XCTestCase {
         XCTAssertTrue(SettingsModel.placement(from: 0, to: 2)! == (1, false), "a after b")
         XCTAssertTrue(SettingsModel.placement(from: 2, to: 1)! == (1, true), "c before b")
     }
+
+    func testPointerGoesToTheMenuOnlyWhenFarFromIt() {
+        let menu = CGRect(x: 400, y: 30, width: 220, height: 180)
+        XCTAssertEqual(Activator.pointerTarget(menu: menu, pointer: CGPoint(x: 1800, y: 60)), CGPoint(x: 424, y: 44),
+                       "lands on the first row")
+        XCTAssertNil(Activator.pointerTarget(menu: menu, pointer: CGPoint(x: 450, y: 15)), "already at the menu")
+        let tiny = CGRect(x: 0, y: 30, width: 30, height: 20)
+        XCTAssertEqual(Activator.pointerTarget(menu: tiny, pointer: CGPoint(x: 900, y: 500)), CGPoint(x: 15, y: 40), "stays inside a small popover")
+    }
+
+    func testPidKeyedNamesAreNeverRemembered() {
+        let settings = Settings.shared
+        let saved = settings.knownNames
+        defer { settings.knownNames = saved }
+        UserDefaults.standard.set(["app:pid.42": "probe", "app:com.example.one": "One"], forKey: "knownNames")
+        XCTAssertEqual(settings.knownNames, ["app:com.example.one": "One"], "old pid-keyed entries are ignored when read")
+    }
 }

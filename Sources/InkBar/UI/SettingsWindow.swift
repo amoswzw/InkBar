@@ -45,7 +45,8 @@ final class SettingsModel: ObservableObject {
             return Row(id: entry.id, name: entry.name, icon: IconStore.shared.image(IconStore.key(entry, 0)), running: true,
                        trusted: Notarization.isTrusted(entry.bundleURL), overflowed: visibility.overflowed.contains(entry.id))
         }
-        for (id, name) in Settings.shared.knownNames where !seen.contains(id) {
+        // An app that isn't running is only worth listing when it has a section to change back.
+        for (id, name) in Settings.shared.knownNames where !seen.contains(id) && Settings.shared.section(id) != .shown {
             rows.append(Row(id: id, name: name, icon: nil, running: false, trusted: true, overflowed: false))
         }
         self.rows = rows
@@ -218,6 +219,7 @@ private struct ItemRow: View {
             Text(row.name).foregroundStyle(row.running ? .primary : .secondary)
             if !row.trusted { Text("●").foregroundStyle(.red).help("Not notarized") }
             if row.overflowed { Text("moved to the ink bar to make room").font(.inkCaption).foregroundStyle(.secondary) }
+            if !row.running { Text("not running").font(.inkCaption).foregroundStyle(.secondary) }
             Spacer()
             Picker("", selection: Binding(get: { Settings.shared.section(row.id) }, set: move)) {
                 ForEach(Section.allCases, id: \.self) { Text($0.title(chinese: false)).tag($0) }
@@ -565,6 +567,7 @@ private extension Color {
 private struct GeneralSettings: View {
     @AppStorage("showOnHover") private var showOnHover = false
     @AppStorage("autoOverflow") private var autoOverflow = true
+    @AppStorage("followMenu") private var followMenu = true
     @State private var launchAtLogin = SMAppService.mainApp.status == .enabled
     @State private var barShortcut = Settings.shared.barShortcut
     @State private var searchShortcut = Settings.shared.searchShortcut
@@ -572,6 +575,9 @@ private struct GeneralSettings: View {
     var body: some View {
         Form {
             Toggle("Show the ink bar when hovering the empty part of the menu bar", isOn: $showOnHover)
+            Toggle("Move the pointer to a menu opened from the ink bar", isOn: $followMenu)
+            Text("Each item opens its menu where it sits in the menu bar, which can be far from the ink bar.")
+                .font(.inkCaption).foregroundStyle(.secondary)
             Toggle("Move items that don't fit into the ink bar", isOn: $autoOverflow)
                 .onChange(of: autoOverflow) { _, _ in changed() }
             Text("Instead of collapsing them behind the system's » button, InkBar keeps them in the ink bar and puts them back when the menu bar has room.")

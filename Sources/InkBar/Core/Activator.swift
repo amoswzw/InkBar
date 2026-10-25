@@ -28,7 +28,7 @@ final class Activator {
                         await IconStore.shared.captureNow(IconStore.key(entry, i), frame: AX.frame(item), overflowButton: button)
                     }
                 }
-                let baseline = Self.raisedWindows(pid: entry.pid)
+                let baseline = Set(Self.raisedWindows(pid: entry.pid).keys)
                 // Pressing blocks until the menu closes, so it can't run on the main thread.
                 DispatchQueue.global(qos: .userInitiated).async { AXUIElementPerformAction(element, kAXPressAction as CFString) }
                 self.watchMenu(pid: entry.pid, ignoring: baseline, release: release)
@@ -56,7 +56,17 @@ final class Activator {
         var ticks = 0
         Timer.scheduledTimer(withTimeInterval: 0.25, repeats: true) { timer in
             ticks += 1
-            let open = !Self.raisedWindows(pid: pid).subtracting(baseline).isEmpty
+            let menus = Self.raisedWindows(pid: pid).filter { !baseline.contains($0.key) }
+            let open = !menus.isEmpty
+            // The item opens its menu where it sits in the menu bar, which can be far from the
+            // ink bar; bring the pointer to it once, as it appears.
+            if open, !seen, Settings.shared.followMenu,
+               let menu = menus.values.max(by: { $0.width * $0.height < $1.width * $1.height }),
+               let pointer = CGEvent(source: nil)?.location,
+               let target = Self.pointerTarget(menu: menu, pointer: pointer) {
+                CGWarpMouseCursorPosition(target)
+                CGAssociateMouseAndMouseCursorPosition(1)
+            }
             seen = seen || open
             if (seen && !open) || (!seen && ticks > 12) || ticks > 2400 {
                 timer.invalidate()
@@ -65,13 +75,24 @@ final class Activator {
         }
     }
 
-    /// Windows above the normal level, where menus and popovers live. Some apps keep one open
-    /// all the time, so only windows that appear after the press count.
-    private static func raisedWindows(pid: pid_t) -> Set<Int> {
+    /// Where to put the pointer for a menu that just opened: over its first row, or nil when the
+    /// pointer is already at it. Both in global coordinates with the origin top-left.
+    static func pointerTarget(menu: CGRect, pointer: CGPoint) -> CGPoint? {
+        guard !menu.insetBy(dx: -40, dy: -40).contains(pointer) else { return nil }
+        return CGPoint(x: menu.minX + min(24, menu.width / 2), y: menu.minY + min(14, menu.height / 2))
+    }
+
+    /// Windows above the normal level, where menus and popovers live, by number with their
+    /// frames. Some apps keep one open all the time, so only windows new since the press count.
+    private static func raisedWindows(pid: pid_t) -> [Int: CGRect] {
         let windows = CGWindowListCopyWindowInfo([.optionOnScreenOnly], kCGNullWindowID) as? [[String: Any]] ?? []
-        return Set(windows.compactMap {
-            ($0[kCGWindowOwnerPID as String] as? pid_t) == pid && ($0[kCGWindowLayer as String] as? Int ?? 0) > 0
-                ? $0[kCGWindowNumber as String] as? Int : nil
-        })
+        var result: [Int: CGRect] = [:]
+        for window in windows where (window[kCGWindowOwnerPID as String] as? pid_t) == pid && (window[kCGWindowLayer as String] as? Int ?? 0) > 0 {
+            guard let number = window[kCGWindowNumber as String] as? Int,
+                  let bounds = window[kCGWindowBounds as String] as? NSDictionary,
+                  let frame = CGRect(dictionaryRepresentation: bounds) else { continue }
+            result[number] = frame
+        }
+        return result
     }
 }

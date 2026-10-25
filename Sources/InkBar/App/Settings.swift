@@ -70,7 +70,7 @@ final class Settings {
     /// Names of entries seen before, so the settings list can show apps that aren't running.
     /// pid-keyed entries can never match a later session, so they don't persist.
     var knownNames: [String: String] {
-        get { defaults.dictionary(forKey: "knownNames") as? [String: String] ?? [:] }
+        get { (defaults.dictionary(forKey: "knownNames") as? [String: String] ?? [:]).filter { !$0.key.hasPrefix("app:pid.") } }
         set { defaults.set(newValue.filter { !$0.key.hasPrefix("app:pid.") }, forKey: "knownNames") }
     }
 
@@ -135,6 +135,12 @@ final class Settings {
 
     private func encode<T: Encodable>(_ value: T, _ key: String) {
         defaults.set(try? JSONEncoder().encode(value), forKey: key)
+    }
+
+    /// Moves the pointer to a menu opened from the ink bar, which opens where its item sits.
+    var followMenu: Bool {
+        get { defaults.object(forKey: "followMenu") as? Bool ?? true }
+        set { defaults.set(newValue, forKey: "followMenu") }
     }
 
     /// Draws captured icons in the theme's ink instead of their own colors.
