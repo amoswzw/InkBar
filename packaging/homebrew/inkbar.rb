@@ -11,7 +11,7 @@ cask "inkbar" do
   desc "Menu bar organizer drawn in ink"
   homepage "https://github.com/amoswzw/InkBar"
 
-  depends_on macos: ">= :sonoma"
+  depends_on macos: :sonoma
 
   app "InkBar.app"
 
