@@ -181,8 +181,10 @@ final class BarView: NSView {
     }
 
     private func cellWidth(_ cell: BarCell) -> CGFloat {
+        // Always at menu bar height, however wide: a capped width shrank wide items, such as
+        // several meters combined into one, to a strip of unreadable miniatures.
         if let image = IconStore.shared.image(cell.key) {
-            return min(140, CGFloat(image.width) / CGFloat(image.height) * iconHeight)
+            return CGFloat(image.width) / CGFloat(image.height) * iconHeight
         }
         return NSAttributedString.styled(cell.label, painter.fonts.text(11), painter.palette.ink).size().width + 8
     }
