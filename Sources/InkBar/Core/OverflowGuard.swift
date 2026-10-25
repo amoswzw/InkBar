@@ -44,7 +44,11 @@ final class OverflowGuard {
             var room = freeSpace(scan) - margin
             var back: [String] = []
             for id in visibility.overflowed.reversed() {
-                let width = widths[id] ?? 60
+                // Prefer the width the entry has now: it may have shrunk or grown since it
+                // was moved in, and the recorded width would trap a shrunken one in the bar.
+                let current = scan.entries.first(where: { $0.id == id })?.elements.reduce(0) { $0 + $1.frame.width }
+                let width = current ?? widths[id] ?? 60
+                if let current { widths[id] = current }
                 guard width + 8 <= room else { continue }
                 room -= width + 8
                 back.append(id)
