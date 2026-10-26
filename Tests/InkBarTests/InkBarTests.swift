@@ -66,6 +66,64 @@ final class InkBarTests: XCTestCase {
         XCTAssertEqual(SystemItem.all.count, 9)
     }
 
+    private func systemEntry(_ raw: Int, pid: pid_t, x: CGFloat) -> BarEntry {
+        BarEntry(kind: .system(raw), name: SystemItem.name(raw), pid: pid, bundleURL: nil,
+                 elements: [StatusElement(element: AXUIElementCreateSystemWide(), title: "", frame: CGRect(x: x, y: 0, width: 30, height: 24))])
+    }
+
+    func testConcealedSystemItemIsRestoredUnderItsOwnersCurrentProcess() {
+        var memory = SystemItemMemory()
+        memory.remember(ScanResult(entries: [systemEntry(2, pid: 10, x: 900), systemEntry(8, pid: 10, x: 950)]),
+                        owner: { $0 == 10 ? "com.apple.controlcenter" : nil })
+
+        var scan = ScanResult(entries: [systemEntry(2, pid: 20, x: 900)])
+        memory.restore(&scan, keep: { $0 == "system:8" }, pid: { $0 == "com.apple.controlcenter" ? 20 : nil })
+        XCTAssertEqual(scan.entries.map(\.id), ["system:2", "system:8"])
+        XCTAssertEqual(scan.entries.last?.pid, 20, "Control Center may have restarted since it was seen")
+    }
+
+    func testSystemItemIsOnlyRestoredWhenWantedAndRunning() {
+        var memory = SystemItemMemory()
+        memory.remember(ScanResult(entries: [systemEntry(8, pid: 10, x: 950)]), owner: { _ in "com.apple.controlcenter" })
+
+        var scan = ScanResult()
+        memory.restore(&scan, keep: { _ in false }, pid: { _ in 10 })
+        XCTAssertTrue(scan.entries.isEmpty, "an item that isn't concealed was removed by the user")
+        memory.restore(&scan, keep: { _ in true }, pid: { _ in nil })
+        XCTAssertTrue(scan.entries.isEmpty, "its owner isn't running")
+    }
+
+    private func capture(width w: Int, height h: Int, glyph columns: Range<Int>) -> CGImage {
+        var pixels = [UInt8](repeating: 0, count: w * h * 4)
+        for y in 0..<h {
+            for x in 0..<w {
+                let i = (y * w + x) * 4
+                let v: UInt8 = columns.contains(x) && (4..<h - 4).contains(y) ? 250 : 30
+                pixels[i] = v; pixels[i + 1] = v; pixels[i + 2] = v; pixels[i + 3] = 255
+            }
+        }
+        return CGImage(width: w, height: h, bitsPerComponent: 8, bitsPerPixel: 32, bytesPerRow: w * 4,
+                       space: CGColorSpaceCreateDeviceRGB(), bitmapInfo: CGBitmapInfo(rawValue: CGImageAlphaInfo.premultipliedLast.rawValue),
+                       provider: CGDataProvider(data: Data(pixels) as CFData)!, decode: nil, shouldInterpolate: false, intent: .defaultIntent)!
+    }
+
+    func testGlyphColumnsLeaveOutTheAppsPadding() throws {
+        let mask = try XCTUnwrap(IconStore.makeMask(capture(width: 40, height: 46, glyph: 12..<30)))
+        XCTAssertEqual(IconStore.glyphColumns(mask), 12...29)
+        XCTAssertFalse(IconStore.isClipped(mask))
+    }
+
+    func testCaptureCutAtItsEdgeIsClipped() throws {
+        let mask = try XCTUnwrap(IconStore.makeMask(capture(width: 44, height: 46, glyph: 0..<18)))
+        XCTAssertTrue(IconStore.isClipped(mask), "the glyph runs off the left edge")
+    }
+
+    func testCaptureScaleFollowsItsHeight() {
+        XCTAssertEqual(IconStore.pixelsPerPoint(capture(width: 68, height: 50, glyph: 18..<50)), 2)
+        XCTAssertEqual(IconStore.pixelsPerPoint(capture(width: 44, height: 46, glyph: 8..<30)), 2)
+        XCTAssertEqual(IconStore.pixelsPerPoint(capture(width: 34, height: 24, glyph: 9..<25)), 1)
+    }
+
     func testBlankCaptureHasNoCoverage() throws {
         let w = 10, h = 10
         let pixels = [UInt8](repeating: 30, count: w * h * 4).enumerated().map { $0.offset % 4 == 3 ? 255 : $0.element }

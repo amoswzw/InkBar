@@ -28,10 +28,12 @@ final class Activator {
                         await IconStore.shared.captureNow(IconStore.key(entry, i), frame: AX.frame(item), overflowButton: button)
                     }
                 }
-                let baseline = Set(Self.raisedWindows(pid: entry.pid).keys)
+                // A system item's menu belongs to another process, Control Center's to ControlCenter.
+                let owner: pid_t? = entry.bundleID == nil ? nil : entry.pid
+                let baseline = Set(Self.raisedWindows(owner: owner).keys)
                 // Pressing blocks until the menu closes, so it can't run on the main thread.
                 DispatchQueue.global(qos: .userInitiated).async { AXUIElementPerformAction(element, kAXPressAction as CFString) }
-                self.watchMenu(pid: entry.pid, ignoring: baseline, release: release)
+                self.watchMenu(owner: owner, ignoring: baseline, release: release)
             }
         }
     }
@@ -51,12 +53,12 @@ final class Activator {
 
     /// Waits for the app's menu or popover to appear and then close. Gives up waiting for it
     /// to appear after a few seconds, for items that open a regular window instead.
-    private func watchMenu(pid: pid_t, ignoring baseline: Set<Int>, release: @escaping () -> Void) {
+    private func watchMenu(owner: pid_t?, ignoring baseline: Set<Int>, release: @escaping () -> Void) {
         var seen = false
         var ticks = 0
         Timer.scheduledTimer(withTimeInterval: 0.25, repeats: true) { timer in
             ticks += 1
-            let menus = Self.raisedWindows(pid: pid).filter { !baseline.contains($0.key) }
+            let menus = Self.raisedWindows(owner: owner).filter { !baseline.contains($0.key) }
             let open = !menus.isEmpty
             // The item opens its menu where it sits in the menu bar, which can be far from the
             // ink bar; bring the pointer to it once, as it appears.
@@ -83,11 +85,15 @@ final class Activator {
     }
 
     /// Windows above the normal level, where menus and popovers live, by number with their
-    /// frames. Some apps keep one open all the time, so only windows new since the press count.
-    private static func raisedWindows(pid: pid_t) -> [Int: CGRect] {
+    /// frames, of one process or of every other one. Some apps keep one open all the time, so
+    /// only windows new since the press count.
+    private static func raisedWindows(owner: pid_t?) -> [Int: CGRect] {
         let windows = CGWindowListCopyWindowInfo([.optionOnScreenOnly], kCGNullWindowID) as? [[String: Any]] ?? []
         var result: [Int: CGRect] = [:]
-        for window in windows where (window[kCGWindowOwnerPID as String] as? pid_t) == pid && (window[kCGWindowLayer as String] as? Int ?? 0) > 0 {
+        let own = getpid()
+        for window in windows where (window[kCGWindowLayer as String] as? Int ?? 0) > 0 {
+            let pid = window[kCGWindowOwnerPID as String] as? pid_t
+            guard owner.map({ pid == $0 }) ?? (pid != own) else { continue }
             guard let number = window[kCGWindowNumber as String] as? Int,
                   let bounds = window[kCGWindowBounds as String] as? NSDictionary,
                   let frame = CGRect(dictionaryRepresentation: bounds) else { continue }

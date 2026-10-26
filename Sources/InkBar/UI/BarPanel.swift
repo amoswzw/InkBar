@@ -93,7 +93,8 @@ final class BarPanelController {
 
 final class BarView: NSView {
     static let height: CGFloat = 46
-    private let pad: CGFloat = 12, gap: CGFloat = 6, iconHeight: CGFloat = 22
+    /// Pictures are trimmed to their glyphs, so the gaps alone space them, as evenly as the menu bar does.
+    private let pad: CGFloat = 12, gap: CGFloat = 16, innerGap: CGFloat = 10, iconHeight: CGFloat = 22
 
     var painter = Painter(theme: .ink, palette: .make(.ink, dark: false), texture: 1)
     var cells: [BarCell] = [] { didSet { needsDisplay = true; invalidateIntrinsicContentSize() } }
@@ -166,7 +167,7 @@ final class BarView: NSView {
                 if previous.alwaysHidden != cell.alwaysHidden, let ctx {
                     p.line(ctx, [CGPoint(x: x + gap, y: 12), CGPoint(x: x + gap - 0.5, y: Self.height - 12)], hue: .c, width: 1.4, seed: 90, small: true)
                 }
-                x += previous.entry.id == cell.entry.id ? 2 : (previous.alwaysHidden != cell.alwaysHidden ? gap * 3 : gap)
+                x += previous.entry.id == cell.entry.id ? innerGap : (previous.alwaysHidden != cell.alwaysHidden ? gap * 2 : gap)
             }
             let width = cellWidth(cell)
             let rect = CGRect(x: x, y: midY - iconHeight / 2, width: width, height: iconHeight)
@@ -181,10 +182,10 @@ final class BarView: NSView {
     }
 
     private func cellWidth(_ cell: BarCell) -> CGFloat {
-        // Always at menu bar height, however wide: a capped width shrank wide items, such as
-        // several meters combined into one, to a strip of unreadable miniatures.
-        if let image = IconStore.shared.image(cell.key) {
-            return CGFloat(image.width) / CGFloat(image.height) * iconHeight
+        // At the size the menu bar draws it, however wide: a capped width shrank wide items, such
+        // as several meters combined into one, to a strip of unreadable miniatures.
+        if let image = IconStore.shared.image(cell.key), let glyph = IconStore.shared.glyph(cell.key) {
+            return CGFloat(glyph.count) / IconStore.pixelsPerPoint(image)
         }
         return NSAttributedString.styled(cell.label, painter.fonts.text(11), painter.palette.ink).size().width + 8
     }
@@ -211,14 +212,22 @@ final class BarView: NSView {
             draw()
             ctx.restoreGState()
         }
-        if Settings.shared.inkIcons, let mask = IconStore.shared.mask(cell.key) {
+        if let image = IconStore.shared.image(cell.key), let glyph = IconStore.shared.glyph(cell.key) {
+            // The whole picture, centered as the menu bar centers it, shifted so its glyph fills
+            // the cell, and cut to the cell to drop the padding around the glyph.
+            let scale = IconStore.pixelsPerPoint(image)
+            let size = CGSize(width: CGFloat(image.width) / scale, height: CGFloat(image.height) / scale)
+            let picture = CGRect(x: rect.minX - CGFloat(glyph.lowerBound) / scale, y: rect.midY - size.height / 2, width: size.width, height: size.height)
             flipped {
-                ctx.clip(to: rect, mask: mask)
-                ctx.setFillColor(pal.ink)
-                ctx.fill(rect)
+                ctx.clip(to: CGRect(x: rect.minX, y: rect.midY - Self.height / 2, width: rect.width, height: Self.height))
+                if Settings.shared.inkIcons, let mask = IconStore.shared.mask(cell.key) {
+                    ctx.clip(to: picture, mask: mask)
+                    ctx.setFillColor(pal.ink)
+                    ctx.fill(picture)
+                } else {
+                    ctx.draw(image, in: picture)
+                }
             }
-        } else if let image = IconStore.shared.image(cell.key) {
-            flipped { ctx.draw(image, in: rect) }
         } else {
             let text = NSAttributedString.styled(cell.label, p.fonts.text(11), pal.ink)
             text.draw(at: CGPoint(x: rect.minX + 4, y: rect.midY - text.size().height / 2))

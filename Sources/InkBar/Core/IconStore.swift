@@ -10,6 +10,7 @@ final class IconStore {
 
     private var images: [String: CGImage] = [:]
     private var masks: [String: CGImage] = [:]
+    private var glyphs: [String: ClosedRange<Int>] = [:]
     private var inFlight: Set<String> = []
     private var capturedAt: [String: Date] = [:]
     private let directory: URL = {
@@ -35,6 +36,7 @@ final class IconStore {
     func preload(_ image: CGImage, for key: String) {
         images[key] = image
         masks[key] = nil
+        glyphs[key] = nil
     }
 
     /// The icon as an alpha mask: how far each pixel stands out from the menu bar behind it.
@@ -43,6 +45,14 @@ final class IconStore {
         guard let image = image(key), let mask = Self.makeMask(image) else { return nil }
         masks[key] = mask
         return mask
+    }
+
+    /// The columns of the icon's picture its glyph covers.
+    func glyph(_ key: String) -> ClosedRange<Int>? {
+        if let glyph = glyphs[key] { return glyph }
+        guard let mask = mask(key), let glyph = Self.glyphColumns(mask) else { return nil }
+        glyphs[key] = glyph
+        return glyph
     }
 
     /// Captures every element whose frame is really on screen. Items the system collapsed
@@ -60,7 +70,7 @@ final class IconStore {
                 inFlight.insert(key)
                 Task { @MainActor in
                     defer { self.inFlight.remove(key) }
-                    guard let image = try? await SCScreenshotManager.captureImage(in: frame) else { return }
+                    guard let image = try? await SCScreenshotManager.captureImage(in: Self.margined(frame)) else { return }
                     self.store(image, key)
                 }
             }
@@ -72,16 +82,22 @@ final class IconStore {
     func captureNow(_ key: String, frame: CGRect, overflowButton: CGRect?) async {
         guard canCapture, #available(macOS 15.2, *), frame.width > 2, Screens.isInMenuBar(frame), !Screens.underNotch(frame) else { return }
         if let overflowButton, frame.minX < overflowButton.maxX { return }
-        guard let image = try? await SCScreenshotManager.captureImage(in: frame) else { return }
+        guard let image = try? await SCScreenshotManager.captureImage(in: Self.margined(frame)) else { return }
         store(image, key)
     }
 
+    /// Some apps report a frame a few points off where they draw, which cut their glyph in half.
+    /// The margin only takes in padding, which the ink bar trims.
+    private static func margined(_ frame: CGRect) -> CGRect { frame.insetBy(dx: -4, dy: 0) }
+
     private func store(_ image: CGImage, _ key: String) {
         capturedAt[key] = Date()
-        // An empty stretch of menu bar means the item wasn't really there; keep the old picture.
-        guard let mask = Self.makeMask(image), Self.coverage(mask) > 0.01 else { return }
+        // An empty stretch of menu bar means the item wasn't really there, and a glyph running off
+        // an edge means its frame was off by more than the margin; either way keep the old picture.
+        guard let mask = Self.makeMask(image), Self.coverage(mask) > 0.01, !Self.isClipped(mask) else { return }
         images[key] = image
         masks[key] = mask
+        glyphs[key] = nil
         guard let destination = CGImageDestinationCreateWithURL(file(key) as CFURL, "public.png" as CFString, 1, nil) else { return }
         CGImageDestinationAddImage(destination, image, nil)
         CGImageDestinationFinalize(destination)
@@ -91,6 +107,25 @@ final class IconStore {
     private func file(_ key: String) -> URL {
         let digest = SHA256.hash(data: Data(key.utf8)).prefix(12).map { String(format: "%02x", $0) }.joined()
         return directory.appendingPathComponent("\(digest).png")
+    }
+
+    /// Columns with any pixel at least a quarter opaque, from the first to the last.
+    static func glyphColumns(_ mask: CGImage) -> ClosedRange<Int>? {
+        guard let data = mask.dataProvider?.data as Data?, mask.width > 0 else { return nil }
+        let w = mask.width, row = mask.bytesPerRow
+        let columns = (0..<w).filter { x in (0..<mask.height).contains { data[$0 * row + x] > 64 } }
+        guard let first = columns.first, let last = columns.last else { return nil }
+        return first...last
+    }
+
+    static func isClipped(_ mask: CGImage) -> Bool {
+        guard let glyph = glyphColumns(mask) else { return false }
+        return glyph.lowerBound == 0 || glyph.upperBound == mask.width - 1
+    }
+
+    /// Menu bar items are 22 to 25 points tall, so the height tells the display's scale.
+    static func pixelsPerPoint(_ image: CGImage) -> CGFloat {
+        max(1, (CGFloat(image.height) / 22).rounded(.down))
     }
 
     /// The share of the mask that is mostly opaque.
