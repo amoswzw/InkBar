@@ -70,7 +70,7 @@ final class IconStore {
                 inFlight.insert(key)
                 Task { @MainActor in
                     defer { self.inFlight.remove(key) }
-                    guard let image = try? await SCScreenshotManager.captureImage(in: Self.margined(frame)) else { return }
+                    guard let image = await Self.captureImage(in: Self.margined(frame)) else { return }
                     self.store(image, key)
                 }
             }
@@ -82,8 +82,17 @@ final class IconStore {
     func captureNow(_ key: String, frame: CGRect, overflowButton: CGRect?) async {
         guard canCapture, #available(macOS 15.2, *), frame.width > 2, Screens.isInMenuBar(frame), !Screens.underNotch(frame) else { return }
         if let overflowButton, frame.minX < overflowButton.maxX { return }
-        guard let image = try? await SCScreenshotManager.captureImage(in: Self.margined(frame)) else { return }
+        guard let image = await Self.captureImage(in: Self.margined(frame)) else { return }
         store(image, key)
+    }
+
+    /// The async form of this API traps when ScreenCaptureKit returns neither an image nor an
+    /// error, which it does for a rect that's entirely off screen or zero-width.
+    @available(macOS 15.2, *)
+    private static func captureImage(in rect: CGRect) async -> CGImage? {
+        await withCheckedContinuation { continuation in
+            SCScreenshotManager.captureImage(in: rect) { image, _ in continuation.resume(returning: image) }
+        }
     }
 
     /// Some apps report a frame a few points off where they draw, which cut their glyph in half.
