@@ -19,6 +19,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private var scanning = false
     private var hidingStarted = false
     private(set) var lastScan = ScanResult()
+    private var systemItems = SystemItemMemory()
 
     func applicationDidFinishLaunching(_ notification: Notification) {
         Fonts.registerBundled()
@@ -87,8 +88,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         }
     }
 
-    private func finishScan(_ result: ScanResult) {
+    private func finishScan(_ scanned: ScanResult) {
         scanning = false
+        var result = scanned
+        systemItems.remember(result)
+        systemItems.restore(&result, keep: visibility.isConcealed)
         lastScan = result
         var names = settings.knownNames
         // pid-keyed entries aren't stored, so counting them would rewrite the settings every scan.

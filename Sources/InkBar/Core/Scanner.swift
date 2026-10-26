@@ -64,6 +64,33 @@ enum SystemItem {
     }
 }
 
+/// System items left off the allowlist aren't created at all, so Accessibility stops reporting
+/// them, unlike hidden apps' items. The last entry each had while it was there stands in for it.
+struct SystemItemMemory {
+    private var seen: [Int: (entry: BarEntry, owner: String)] = [:]
+
+    mutating func remember(_ scan: ScanResult,
+                           owner: (pid_t) -> String? = { NSRunningApplication(processIdentifier: $0)?.bundleIdentifier }) {
+        for entry in scan.entries {
+            guard case .system(let raw) = entry.kind, let bundle = owner(entry.pid) else { continue }
+            seen[raw] = (entry, bundle)
+        }
+    }
+
+    /// Adds the remembered entries the scan is missing that `keep` accepts, under their owner's
+    /// process now, which is new if it restarted since.
+    func restore(_ scan: inout ScanResult, keep: (String) -> Bool,
+                 pid: (String) -> pid_t? = { NSRunningApplication.runningApplications(withBundleIdentifier: $0).first?.processIdentifier }) {
+        let present = Set(scan.entries.map(\.id))
+        for (_, item) in seen where !present.contains(item.entry.id) && keep(item.entry.id) {
+            guard let pid = pid(item.owner) else { continue }
+            let entry = item.entry
+            scan.entries.append(BarEntry(kind: entry.kind, name: entry.name, pid: pid, bundleURL: nil, elements: entry.elements))
+        }
+        scan.entries.sort { ($0.elements.first?.frame.minX ?? 0) < ($1.elements.first?.frame.minX ?? 0) }
+    }
+}
+
 enum AX {
     static func attribute(_ element: AXUIElement, _ name: String) -> AnyObject? {
         var value: AnyObject?
