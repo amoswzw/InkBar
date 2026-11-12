@@ -93,6 +93,14 @@ final class InkBarTests: XCTestCase {
         XCTAssertTrue(scan.entries.isEmpty, "its owner isn't running")
     }
 
+    func testHiddenSystemItemsMissingAtStartupAreRecoveredOnce() {
+        var recovery = SystemItemRecovery()
+        let sections: [String: Section] = ["system:2": .alwaysHidden, "system:8": .hidden]
+        let scan = ScanResult(entries: [systemEntry(2, pid: 10, x: 900)])
+        XCTAssertEqual(recovery.missing(in: scan, sections: sections), ["system:8"])
+        XCTAssertTrue(recovery.missing(in: scan, sections: sections).isEmpty)
+    }
+
     private func capture(width w: Int, height h: Int, glyph columns: Range<Int>) -> CGImage {
         var pixels = [UInt8](repeating: 0, count: w * h * 4)
         for y in 0..<h {

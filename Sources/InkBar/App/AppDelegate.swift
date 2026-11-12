@@ -20,6 +20,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private var hidingStarted = false
     private(set) var lastScan = ScanResult()
     private var systemItems = SystemItemMemory()
+    private var systemItemRecovery = SystemItemRecovery()
+    private var recoveryRelease: (() -> Void)?
+    private var recoveryIDs: Set<String> = []
+    private var recoveryReadyAt = Date.distantPast
 
     func applicationDidFinishLaunching(_ notification: Notification) {
         Fonts.registerBundled()
@@ -112,6 +116,29 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 self.scan()
             }
             return
+        }
+        if let release = recoveryRelease, Date() >= recoveryReadyAt {
+            recoveryRelease = nil
+            let recovered = scanned.entries.filter { recoveryIDs.contains($0.id) }
+            recoveryIDs = []
+            Task { @MainActor in
+                for entry in recovered {
+                    for (index, element) in entry.elements.enumerated() {
+                        await IconStore.shared.captureNow(IconStore.key(entry, index), frame: element.frame,
+                                                          overflowButton: scanned.overflowButton)
+                    }
+                }
+                release()
+                self.scan()
+            }
+        } else if recoveryRelease == nil {
+            let missing = systemItemRecovery.missing(in: result, sections: settings.sections)
+            if !missing.isEmpty {
+                recoveryIDs = Set(missing)
+                recoveryRelease = visibility.reveal(missing)
+                recoveryReadyAt = Date().addingTimeInterval(0.8)
+                DispatchQueue.main.asyncAfter(deadline: .now() + 0.8) { self.scan() }
+            }
         }
         triggers.evaluate()
         overflow.check(result)

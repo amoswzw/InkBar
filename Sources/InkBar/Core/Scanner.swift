@@ -91,6 +91,21 @@ struct SystemItemMemory {
     }
 }
 
+/// Hidden system items disappear from Accessibility before the scanner can remember them.
+/// Give each missing configured item one chance to be scanned while temporarily visible.
+struct SystemItemRecovery {
+    private var attempted: Set<String> = []
+
+    mutating func missing(in scan: ScanResult, sections: [String: Section]) -> [String] {
+        let present = Set(scan.entries.map(\.id))
+        let missing = SystemItem.all.map { "system:\($0)" }.filter {
+            sections[$0] != nil && sections[$0] != .shown && !present.contains($0) && !attempted.contains($0)
+        }
+        attempted.formUnion(missing)
+        return missing
+    }
+}
+
 enum AX {
     static func attribute(_ element: AXUIElement, _ name: String) -> AnyObject? {
         var value: AnyObject?

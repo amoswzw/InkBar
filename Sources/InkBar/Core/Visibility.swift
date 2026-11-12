@@ -53,14 +53,21 @@ final class VisibilityController {
 
     /// Shows an entry in the menu bar until the returned closure is called.
     func reveal(_ id: String) -> () -> Void {
-        reveals[id, default: 0] += 1
+        reveal([id])
+    }
+
+    /// Reveal several items with one allowlist update while recovering a scan.
+    func reveal(_ ids: [String]) -> () -> Void {
+        for id in ids { reveals[id, default: 0] += 1 }
         update()
         var released = false
         return { [weak self] in
             guard let self, !released else { return }
             released = true
-            self.reveals[id]! -= 1
-            if self.reveals[id] == 0 { self.reveals[id] = nil }
+            for id in ids {
+                self.reveals[id]! -= 1
+                if self.reveals[id] == 0 { self.reveals[id] = nil }
+            }
             self.update()
         }
     }
