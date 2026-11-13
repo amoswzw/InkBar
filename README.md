@@ -54,7 +54,8 @@ wide separator item no longer pushes anything off screen. InkBar uses three syst
   missing from the list aren't drawn. The system drops the list when InkBar quits or crashes,
   so nothing stays hidden by accident.
 - **Reading** the menu bar goes through Accessibility: each app's extras menu bar lists its
-  status items and their frames.
+  status items and their frames while visible. InkBar remembers hidden items and briefly reveals
+  any it missed after a restart.
 - **Moving** an item is a ⌘-drag posted as mouse events, the same gesture you'd make by hand.
 
 What this means in practice:

@@ -64,16 +64,16 @@ enum SystemItem {
     }
 }
 
-/// System items left off the allowlist aren't created at all, so Accessibility stops reporting
-/// them, unlike hidden apps' items. The last entry each had while it was there stands in for it.
-struct SystemItemMemory {
-    private var seen: [Int: (entry: BarEntry, owner: String)] = [:]
+/// The allowlist can remove hidden items from Accessibility, including third-party apps' items.
+/// Keep their last real entry while their owner is running so the ink bar can still draw them.
+struct HiddenItemMemory {
+    private var seen: [String: (entry: BarEntry, owner: String)] = [:]
 
     mutating func remember(_ scan: ScanResult,
                            owner: (pid_t) -> String? = { NSRunningApplication(processIdentifier: $0)?.bundleIdentifier }) {
         for entry in scan.entries {
-            guard case .system(let raw) = entry.kind, let bundle = owner(entry.pid) else { continue }
-            seen[raw] = (entry, bundle)
+            guard let bundle = entry.bundleID ?? owner(entry.pid) else { continue }
+            seen[entry.id] = (entry, bundle)
         }
     }
 
@@ -85,21 +85,24 @@ struct SystemItemMemory {
         for (_, item) in seen where !present.contains(item.entry.id) && keep(item.entry.id) {
             guard let pid = pid(item.owner) else { continue }
             let entry = item.entry
-            scan.entries.append(BarEntry(kind: entry.kind, name: entry.name, pid: pid, bundleURL: nil, elements: entry.elements))
+            scan.entries.append(BarEntry(kind: entry.kind, name: entry.name, pid: pid,
+                                         bundleURL: entry.bundleURL, elements: entry.elements))
         }
         scan.entries.sort { ($0.elements.first?.frame.minX ?? 0) < ($1.elements.first?.frame.minX ?? 0) }
     }
 }
 
-/// Hidden system items disappear from Accessibility before the scanner can remember them.
 /// Give each missing configured item one chance to be scanned while temporarily visible.
-struct SystemItemRecovery {
+struct HiddenItemRecovery {
     private var attempted: Set<String> = []
 
-    mutating func missing(in scan: ScanResult, sections: [String: Section]) -> [String] {
+    mutating func missing(in scan: ScanResult, sections: [String: Section], runningBundles: Set<String>) -> [String] {
         let present = Set(scan.entries.map(\.id))
-        let missing = SystemItem.all.map { "system:\($0)" }.filter {
-            sections[$0] != nil && sections[$0] != .shown && !present.contains($0) && !attempted.contains($0)
+        let systemIDs = Set(SystemItem.all.map { "system:\($0)" })
+        let missing = sections.keys.sorted().filter { id in
+            guard sections[id] != .shown, !present.contains(id), !attempted.contains(id) else { return false }
+            if systemIDs.contains(id) { return true }
+            return id.hasPrefix("app:") && runningBundles.contains(String(id.dropFirst(4)))
         }
         attempted.formUnion(missing)
         return missing

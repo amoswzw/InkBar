@@ -19,8 +19,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private var scanning = false
     private var hidingStarted = false
     private(set) var lastScan = ScanResult()
-    private var systemItems = SystemItemMemory()
-    private var systemItemRecovery = SystemItemRecovery()
+    private var hiddenItems = HiddenItemMemory()
+    private var hiddenItemRecovery = HiddenItemRecovery()
     private var recoveryRelease: (() -> Void)?
     private var recoveryIDs: Set<String> = []
     private var recoveryReadyAt = Date.distantPast
@@ -95,8 +95,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private func finishScan(_ scanned: ScanResult) {
         scanning = false
         var result = scanned
-        systemItems.remember(result)
-        systemItems.restore(&result, keep: visibility.isConcealed)
+        hiddenItems.remember(result)
+        hiddenItems.restore(&result, keep: visibility.isConcealed)
         lastScan = result
         var names = settings.knownNames
         // pid-keyed entries aren't stored, so counting them would rewrite the settings every scan.
@@ -132,7 +132,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 self.scan()
             }
         } else if recoveryRelease == nil {
-            let missing = systemItemRecovery.missing(in: result, sections: settings.sections)
+            let running = Set(NSWorkspace.shared.runningApplications.compactMap(\.bundleIdentifier))
+            let missing = hiddenItemRecovery.missing(in: result, sections: settings.sections, runningBundles: running)
             if !missing.isEmpty {
                 recoveryIDs = Set(missing)
                 recoveryRelease = visibility.reveal(missing)

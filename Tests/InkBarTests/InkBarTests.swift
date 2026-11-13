@@ -72,7 +72,7 @@ final class InkBarTests: XCTestCase {
     }
 
     func testConcealedSystemItemIsRestoredUnderItsOwnersCurrentProcess() {
-        var memory = SystemItemMemory()
+        var memory = HiddenItemMemory()
         memory.remember(ScanResult(entries: [systemEntry(2, pid: 10, x: 900), systemEntry(8, pid: 10, x: 950)]),
                         owner: { $0 == 10 ? "com.apple.controlcenter" : nil })
 
@@ -83,7 +83,7 @@ final class InkBarTests: XCTestCase {
     }
 
     func testSystemItemIsOnlyRestoredWhenWantedAndRunning() {
-        var memory = SystemItemMemory()
+        var memory = HiddenItemMemory()
         memory.remember(ScanResult(entries: [systemEntry(8, pid: 10, x: 950)]), owner: { _ in "com.apple.controlcenter" })
 
         var scan = ScanResult()
@@ -93,12 +93,29 @@ final class InkBarTests: XCTestCase {
         XCTAssertTrue(scan.entries.isEmpty, "its owner isn't running")
     }
 
-    func testHiddenSystemItemsMissingAtStartupAreRecoveredOnce() {
-        var recovery = SystemItemRecovery()
-        let sections: [String: Section] = ["system:2": .alwaysHidden, "system:8": .hidden]
+    func testHiddenItemsMissingAtStartupAreRecoveredOnce() {
+        var recovery = HiddenItemRecovery()
+        let sections: [String: Section] = ["system:2": .alwaysHidden, "system:8": .hidden,
+                                           "app:com.amosw.inkshot": .hidden, "app:gone": .hidden]
         let scan = ScanResult(entries: [systemEntry(2, pid: 10, x: 900)])
-        XCTAssertEqual(recovery.missing(in: scan, sections: sections), ["system:8"])
-        XCTAssertTrue(recovery.missing(in: scan, sections: sections).isEmpty)
+        let running: Set<String> = ["com.amosw.inkshot"]
+        XCTAssertEqual(recovery.missing(in: scan, sections: sections, runningBundles: running),
+                       ["app:com.amosw.inkshot", "system:8"])
+        XCTAssertTrue(recovery.missing(in: scan, sections: sections, runningBundles: running).isEmpty)
+    }
+
+    func testConcealedAppItemSurvivesDisappearingFromAccessibility() {
+        let app = BarEntry(kind: .app("com.amosw.inkshot"), name: "Inkshot", pid: 10,
+                           bundleURL: URL(fileURLWithPath: "/Applications/Inkshot.app"),
+                           elements: [StatusElement(element: AXUIElementCreateSystemWide(), title: "Inkshot",
+                                                    frame: CGRect(x: 950, y: 0, width: 24, height: 24))])
+        var memory = HiddenItemMemory()
+        memory.remember(ScanResult(entries: [app]))
+        var scan = ScanResult()
+        memory.restore(&scan, keep: { $0 == app.id }, pid: { $0 == "com.amosw.inkshot" ? 20 : nil })
+        XCTAssertEqual(scan.entries.map(\.id), [app.id])
+        XCTAssertEqual(scan.entries.first?.pid, 20)
+        XCTAssertEqual(scan.entries.first?.bundleURL, app.bundleURL)
     }
 
     private func capture(width w: Int, height h: Int, glyph columns: Range<Int>) -> CGImage {
